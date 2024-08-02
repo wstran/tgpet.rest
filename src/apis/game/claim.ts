@@ -6,7 +6,7 @@ import { ObjectId } from 'mongodb';
 import { roundDown } from '../../libs/custom';
 import { CONFIG } from '../../config';
 
-const redisWrapper = new RedisWrapper(process.env.REDIS_URL || "redis://127.0.0.1:6379");
+const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 
 const REDIS_KEY = 'TPET_API';
 
@@ -78,7 +78,7 @@ const caculateFarmAmount = (pets: Pet[]): [number, ObjectId[]] => {
 }
 
 export default function (router: Router) {
-    router.post("/game/claim", Middleware, async (req, res) => {
+    router.post('/game/claim', Middleware, async (req, res) => {
         const tele_user = (req as RequestWithUser).tele_user;
 
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
@@ -89,9 +89,9 @@ export default function (router: Router) {
         const dbInstance = Database.getInstance();
         const db = await dbInstance.getDb();
         const client = dbInstance.getClient();
-        const userCollection = db.collection("users");
-        const petCollection = db.collection("pets");
-        const logCollection = db.collection("logs");
+        const userCollection = db.collection('users');
+        const petCollection = db.collection('pets');
+        const logCollection = db.collection('logs');
 
         const session = client.startSession({ causalConsistency: true });
 

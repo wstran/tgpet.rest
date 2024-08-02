@@ -1,5 +1,5 @@
-/* import { Markup, Telegraf } from "telegraf";
-import * as dotenv from "dotenv";
+/* import { Markup, Telegraf } from 'telegraf';
+import * as dotenv from 'dotenv';
 import Database from './libs/database';
 import path from 'path';
 
@@ -18,7 +18,7 @@ bot.start((ctx) => {
   ]);
 
   ctx.reply(welcomeMessage, {
-    parse_mode: "HTML",
+    parse_mode: 'HTML',
     reply_markup: operationMenu.reply_markup,
   });
 });
@@ -33,7 +33,7 @@ bot.command('play', (ctx) => {
   ]);
 
   ctx.reply(playMessage, {
-    parse_mode: "HTML",
+    parse_mode: 'HTML',
     reply_markup: playButton.reply_markup,
   });
 });
@@ -71,7 +71,7 @@ bot.command('checkairdrop', async (ctx) => {
     const userReward = await airdropCollection.findOne({ tele_id: userId });
 
     if (userReward) {
-      const checkInStatus = userReward.CheckIn ? "Yes" : "No";
+      const checkInStatus = userReward.CheckIn ? 'Yes' : 'No';
 
       const rewardMessage = `
 <b>Your Rewards:</b>
@@ -113,7 +113,7 @@ bot.help((ctx) => {
 
 For more detailed help or feedback, visit our channel: https://t.me/lottefi_app`;
 
-  ctx.reply(helpMessage, { parse_mode: "HTML" });
+  ctx.reply(helpMessage, { parse_mode: 'HTML' });
 });
 
 bot.on('text', async (ctx) => {

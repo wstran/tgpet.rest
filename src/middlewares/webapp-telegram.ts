@@ -19,7 +19,7 @@ export interface RequestWithUser extends Request {
     tele_user: TeleUser;
 };
 
-const redisWrapper = new RedisWrapper(process.env.REDIS_URL || "redis://127.0.0.1:6379");
+const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 
 export default async function (req: Request, res: Response, next: NextFunction) {
     if (process.env.NODE_ENV === 'development') {

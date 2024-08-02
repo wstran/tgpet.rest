@@ -1,4 +1,4 @@
-import Database from "./libs/database";
+import Database from './libs/database';
 
 type Config = {
     config_type: string;

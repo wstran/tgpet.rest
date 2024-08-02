@@ -4,12 +4,12 @@ import Database from '../../libs/database';
 import { RedisWrapper } from '../../libs/redis-wrapper';
 import { ObjectId } from 'mongodb';
 
-const redisWrapper = new RedisWrapper(process.env.REDIS_URL || "redis://127.0.0.1:6379");
+const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 
 const REDIS_KEY = 'TPET_API';
 
 export default function (router: Router) {
-    router.post("/game/farm", Middleware, async (req, res) => {
+    router.post('/game/farm', Middleware, async (req, res) => {
         const { pet_id } = req.body;
 
         if (typeof pet_id !== 'string') {
@@ -27,8 +27,8 @@ export default function (router: Router) {
         const dbInstance = Database.getInstance();
         const db = await dbInstance.getDb();
         const client = dbInstance.getClient();
-        const petCollection = db.collection("pets");
-        const logCollection = db.collection("logs");
+        const petCollection = db.collection('pets');
+        const logCollection = db.collection('logs');
 
         const session = client.startSession({ causalConsistency: true });
 

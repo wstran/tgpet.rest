@@ -18,7 +18,7 @@ export interface User {
 const not_allows = ['wallet'];
 
 export default function (router: Router) {
-    router.get("/self/me", Middleware, async (req, res) => {
+    router.get('/self/me', Middleware, async (req, res) => {
         const tele_user = (req as RequestWithUser).tele_user;
 
         try {
@@ -51,7 +51,7 @@ export default function (router: Router) {
             );
 
             if (config_project) {
-                result_promise.push(configCollection.find({ ...((config_project && config_project !== "*") && { config_type: { $in: config_project.split(' ') } }) }).project({ _id: 0 }).toArray());
+                result_promise.push(configCollection.find({ ...((config_project && config_project !== '*') && { config_type: { $in: config_project.split(' ') } }) }).project({ _id: 0 }).toArray());
             };
 
             const [user, config]: [User, Config | undefined] = await Promise.all(result_promise) as any;

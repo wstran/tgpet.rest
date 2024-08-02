@@ -16,7 +16,7 @@ export interface User {
 };
 
 export default function (router: Router) {
-    router.get("/self/pet", Middleware, async (req, res) => {
+    router.get('/self/pet', Middleware, async (req, res) => {
         const tele_user = (req as RequestWithUser).tele_user;
 
         const { page, limit } = req.params;
