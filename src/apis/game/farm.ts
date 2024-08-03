@@ -48,7 +48,7 @@ export default function (router: Router) {
             const mana_timestamp = pet.mana.getTime();
 
             if (now_date.getTime() >= mana_timestamp) {
-                res.status(200).json({ status: 'PET_RUNS_OUT_OF_MANA' });
+                res.status(200).json({ status: 'PET_IS_OUT_OF_MANA' });
                 return;
             };
 

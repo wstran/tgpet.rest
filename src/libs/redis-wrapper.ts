@@ -7,7 +7,7 @@ export class RedisWrapper {
     private useRedis: boolean = true;
 
     constructor(redisUrl: string) {
-        this.redisClient = new IORedis(redisUrl);
+        this.redisClient = new IORedis(redisUrl, { retryStrategy: (times) => Math.min(times * 50, 2000) });
 
         this.redisClient.on('connect', () => {
             this.useRedis = true;

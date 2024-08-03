@@ -1,10 +1,13 @@
 import express from 'express';
 import session from 'express-session';
 import cors from 'cors';
-// import bot from './bot';
-import Apps from './apps';
 import Apis from './apis';
 import Database from './libs/database';
+import RateLimit from 'express-rate-limit';
+import RedisStore from 'rate-limit-redis';
+import Redis from 'ioredis';
+import './config';
+// import bot from './bot';
 
 if (
   !process.env.PORT_BE ||
@@ -27,7 +30,25 @@ if (process.env.NODE_ENV === 'production') {
   app.use(bot.webhookCallback(secretPath));
 }; */
 
+const redisClient = new Redis(process.env.REDIS_URL, { retryStrategy: (times) => Math.min(times * 50, 2000) });
+
+const limiter = RateLimit({
+  store: new RedisStore({
+    // @ts-ignore
+    sendCommand: (...args: string[]) => redisClient.call(...args),
+  }),
+  windowMs: 1000,
+  max: 5,
+  statusCode: 429,
+  message: 'Too many requests.',
+  standardHeaders: false,
+  legacyHeaders: false,
+});
+
+app.use(limiter);
+
 app.use(express.json());
+
 app.use(
   cors({
     origin: [process.env.CLIENT_URL, 'http://localhost:3000'],
@@ -48,8 +69,6 @@ app.use((_, res, next) => {
   res.header('Access-Control-Allow-Headers', 'Content-Type, --webapp-init');
   next();
 });
-
-app.use('/', Apps);
 
 app.use('/api', Apis);
 

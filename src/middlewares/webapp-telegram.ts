@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import CryptoJS from 'crypto-js';
 import Database from '../libs/database';
 import { RedisWrapper } from '../libs/redis-wrapper';
-import { generateRandomUpperString } from 'libs/custom';
+import { generateRandomUpperString } from '../libs/custom';
 
 export interface User {
     tele_id: string;

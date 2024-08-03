@@ -2,80 +2,12 @@ import { Router } from 'express';
 import Middleware, { RequestWithUser } from '../../middlewares/webapp-telegram';
 import Database from '../../libs/database';
 import { RedisWrapper } from '../../libs/redis-wrapper';
-import { ObjectId } from 'mongodb';
-import { roundDown } from '../../libs/custom';
-import { CONFIG } from '../../config';
+import { Document, WithId } from 'mongodb';
+import { caculateFarmAmount, caculateFarmBoost, Pet } from './libs';
 
 const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 
 const REDIS_KEY = 'TPET_API';
-
-interface Pet {
-    _id: ObjectId,
-    tele_id: string,
-    farm_at?: Date,
-    mana: Date,
-}
-
-/* const caculateFarmBoost = (
-    current_time: number,
-    farm_at: number,
-    boosts: { percent: number; start_at: string; end_at: string }[],
-    config_level: Level
-): number => {
-    let boost_balance = 0;
-
-    for (let i = 0; i < boosts.length; ++i) {
-        const start_at = Date.parse(boosts[i].start_at);
-        const end_at = Date.parse(boosts[i].end_at);
-
-        if (current_time >= start_at) {
-            if (current_time < end_at) {
-                const current_balance =
-                    ((current_time - farm_at) / 1000 / 60) * config_level.base_speed;
-
-                boost_balance +=
-                    current_balance > 0
-                        ? (current_balance / 100) * boosts[i].boost_percent
-                        : 0;
-            };
-        };
-    };
-
-    return boost_balance
-}; */
-
-/* function caculateFarmBoost(boosts: { count: number, date: Date }) {
-    if (!boosts) return null;
-
-    const currentDate = new Date();
-
-    const sortedKeys = Object.keys(CONFIG_BOOSTS).map(Number).sort((a, b) => a - b);
-
-    for (let i = 0; i < sortedKeys.length; i++) {
-        if (boosts.count < sortedKeys[i]) {
-            const data = CONFIG_BOOSTS[sortedKeys[i - 1]];
-
-            return (data && ((currentDate.getTime() - boosts.date.getTime()) / (24 * 60 * 60 * 1000)) < data.day) ? data.boost : null;
-        };
-    };
-
-    return CONFIG_BOOSTS[sortedKeys[sortedKeys.length - 1]].boost;
-}; */
-
-// DEV
-const caculateFarmAmount = (pets: Pet[]): [number, ObjectId[]] => {
-    const boost_config = CONFIG.GET('boost');
-
-    let total_amount = 0;
-    const pet_ids: ObjectId[] = [];
-
-    for (let i = 0; i < pets.length; ++i) {
-
-    };
-
-    return [Number(roundDown(total_amount, 2)), pet_ids];
-}
 
 export default function (router: Router) {
     router.post('/game/claim', Middleware, async (req, res) => {
@@ -97,30 +29,39 @@ export default function (router: Router) {
 
         try {
             session.startTransaction({ willRetryWrite: true });
+            const [user, pets] = await Promise.all([
+                userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, boosts: 1 } }),
+                petCollection.find({ tele_id: tele_user.tele_id }, { session }).project({ _id: 1, farm_at: 1, mana: 1, balance: 1, accumulate_total_cost: 1 }).toArray()
+            ]) as [WithId<Document> | null, Pet[]];
 
-            const pets = await petCollection.find({ tele_id: tele_user.tele_id }, { session }).toArray() as Pet[];
+            const now_date = new Date();
 
-            const [farm_points, pet_ids] = caculateFarmAmount(pets);
+            const [farm_points, bulkOps] = caculateFarmAmount(pets, now_date);
 
-            if (farm_points > 0 && pet_ids.length > 0) {
-                const now_date = new Date();
+            let total_points = farm_points;
+
+            if (farm_points > 0 && bulkOps.length > 0) {
+                const boost_points = caculateFarmBoost(now_date.getTime(), user?.boosts || [], farm_points);
+
+                total_points += boost_points;
 
                 const [update_user_result, update_pet_result, insert_log_result] = await Promise.all([
-                    userCollection.updateOne({ tele_id: tele_user.tele_id }, { $inc: { 'balances.tgp': farm_points } }, { session }),
-                    petCollection.updateMany({ _id: { $in: pet_ids } }, { $set: { farm_at: now_date, farm_balance: 0 } }, { session }),
-                    logCollection.insertOne({ log_type: 'game/claim', tele_id: tele_user.tele_id, farm_points, created_at: now_date, pet_ids, pets_before: pets }, { session })
+                    userCollection.updateOne({ tele_id: tele_user.tele_id }, { $inc: { 'balances.tgp': total_points, 'totals.game_claim_tgp': total_points } }, { session }),
+                    petCollection.bulkWrite(bulkOps, { session }),
+                    logCollection.insertOne({ log_type: 'game/claim', tele_id: tele_user.tele_id, farm_points, boost_points, total_points, created_at: now_date, pets_before: pets, bulkOps }, { session })
                 ]);
 
                 if (
-                    update_user_result.acknowledged === true && update_user_result.modifiedCount > 0 &&
-                    update_pet_result.acknowledged === true && update_pet_result.modifiedCount > 0 &&
+                    update_user_result.modifiedCount > 0 &&
+                    !update_pet_result.hasWriteErrors() &&
+                    update_pet_result.modifiedCount > 0 &&
                     insert_log_result.acknowledged === true
                 ) {
                     await session.commitTransaction();
                 };
             };
 
-            res.status(200).json({ farm_points });
+            res.status(200).json({ total_points });
         } catch (error) {
             await session.abortTransaction();
             res.status(500).json({ message: 'Internal server error.' });
