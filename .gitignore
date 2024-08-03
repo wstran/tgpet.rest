@@ -29,3 +29,4 @@ yarn-error.log*
 local_*
 release/*
 
+.note
