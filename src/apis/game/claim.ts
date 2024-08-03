@@ -24,13 +24,14 @@ export default function (router: Router) {
         const userCollection = db.collection('users');
         const petCollection = db.collection('pets');
         const logCollection = db.collection('logs');
+        const todoCollection = db.collection('todos');
 
         const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
 
         try {
             session.startTransaction();
             const [user, pets] = await Promise.all([
-                userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, boosts: 1 } }),
+                userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, referral_code: 1, boosts: 1 } }),
                 petCollection.find({ tele_id: tele_user.tele_id }, { session }).project({ _id: 1, type: 1, farm_at: 1, mana: 1, balance: 1, accumulate_total_cost: 1 }).toArray()
             ]) as [WithId<Document> | null, Pet[]];
 
@@ -45,9 +46,10 @@ export default function (router: Router) {
 
                 total_points += boost_points;
 
-                const [update_user_result, update_pet_result, insert_log_result] = await Promise.all([
+                const [update_user_result, update_pet_result, update_todo_result, insert_log_result] = await Promise.all([
                     userCollection.updateOne({ tele_id: tele_user.tele_id }, { $inc: { 'balances.tgp': total_points, 'totals.game_claim_tgp': total_points } }, { session }),
                     petCollection.bulkWrite(bulkOps, { session }),
+                    user?.referral_code && todoCollection.insertOne({ todo_type: 'game/claim/referral', tele_id: tele_user.tele_id, referral_code: user.referral_code, farm_points, created_at: now_date }, { session }),
                     logCollection.insertOne({ log_type: 'game/claim', tele_id: tele_user.tele_id, farm_points, boost_points, total_points, created_at: now_date, pets_before: pets, bulkOps }, { session })
                 ]);
 
@@ -55,6 +57,7 @@ export default function (router: Router) {
                     update_user_result.modifiedCount > 0 &&
                     !update_pet_result.hasWriteErrors() &&
                     update_pet_result.modifiedCount > 0 &&
+                    (!update_todo_result || update_todo_result.acknowledged === true) &&
                     insert_log_result.acknowledged === true
                 ) {
                     await session.commitTransaction();
