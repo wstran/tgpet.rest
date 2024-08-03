@@ -30,10 +30,10 @@ export default function (router: Router) {
         const petCollection = db.collection('pets');
         const logCollection = db.collection('logs');
 
-        const session = client.startSession({ causalConsistency: true });
+        const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
 
         try {
-            session.startTransaction({ willRetryWrite: true });
+            session.startTransaction();
 
             const pet_object_id = new ObjectId(pet_id);
 

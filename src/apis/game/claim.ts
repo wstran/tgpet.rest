@@ -25,13 +25,13 @@ export default function (router: Router) {
         const petCollection = db.collection('pets');
         const logCollection = db.collection('logs');
 
-        const session = client.startSession({ causalConsistency: true });
+        const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
 
         try {
-            session.startTransaction({ willRetryWrite: true });
+            session.startTransaction();
             const [user, pets] = await Promise.all([
                 userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, boosts: 1 } }),
-                petCollection.find({ tele_id: tele_user.tele_id }, { session }).project({ _id: 1, farm_at: 1, mana: 1, balance: 1, accumulate_total_cost: 1 }).toArray()
+                petCollection.find({ tele_id: tele_user.tele_id }, { session }).project({ _id: 1, type: 1, farm_at: 1, mana: 1, balance: 1, accumulate_total_cost: 1 }).toArray()
             ]) as [WithId<Document> | null, Pet[]];
 
             const now_date = new Date();
@@ -41,7 +41,7 @@ export default function (router: Router) {
             let total_points = farm_points;
 
             if (farm_points > 0 && bulkOps.length > 0) {
-                const boost_points = caculateFarmBoost(now_date.getTime(), user?.boosts || [], farm_points);
+                const boost_points = caculateFarmBoost(now_date.getTime(), pets, user?.boosts || []);
 
                 total_points += boost_points;
 

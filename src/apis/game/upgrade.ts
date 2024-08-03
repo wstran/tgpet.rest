@@ -2,6 +2,9 @@ import { Router } from 'express';
 import Middleware, { RequestWithUser } from '../../middlewares/webapp-telegram';
 import Database from '../../libs/database';
 import { RedisWrapper } from '../../libs/redis-wrapper';
+import { ObjectId } from 'mongodb';
+import { caculateFarmBoost, Pet } from './libs';
+import { CONFIG } from '../../config';
 
 const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 
@@ -9,6 +12,13 @@ const REDIS_KEY = 'TPET_API';
 
 export default function (router: Router) {
     router.post('/game/upgrade', Middleware, async (req, res) => {
+        const { pet_id } = req.body;
+
+        if (typeof pet_id !== 'string') {
+            res.status(400).json({ message: 'Bad request.' });
+            return;
+        };
+
         const tele_user = (req as RequestWithUser).tele_user;
 
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
@@ -23,18 +33,108 @@ export default function (router: Router) {
         const petCollection = db.collection('pets');
         const logCollection = db.collection('logs');
 
-        const session = client.startSession({ causalConsistency: true });
+        const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
 
-        try {
-            session.startTransaction({ willRetryWrite: true });
+            try {
+                session.startTransaction();
 
-            
-        } catch (error) {
-            await session.abortTransaction();
-            res.status(500).json({ message: 'Internal server error.' });
-        } finally {
-            await session.endSession();
-            await redisWrapper.delete(REDIS_KEY, tele_user.tele_id);
-        };
+                const pet_object_id = new ObjectId(pet_id);
+
+                const [user, pet] = await Promise.all([
+                    userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, balances: 1, boosts: 1 }, session }),
+                    petCollection.findOne({ _id: pet_object_id }, { projection: { _id: 1, level: 1, mana: 1, farm_at: 1, accumulate_total_cost: 1 }, session }) as Promise<Pet>
+                ]);
+
+                if (user === null) {
+                    res.status(404).json({ message: 'Not found.' });
+                    return;
+                };
+
+                if (pet === null) {
+                    res.status(404).json({ message: 'Not found.', status: 'PET_NOT_FOUND' });
+                    return;
+                };
+
+                if (pet.level === 50) {
+                    res.status(404).json({ message: 'Not found.', status: 'PET_MAX_LEVEL' });
+                    return;
+                };
+
+                const config_farm_data = CONFIG.GET('farm_data');
+
+                const tgp_balance = (user.balances?.tgp || 0);
+                
+                const tgpet_balance = (user.balances?.tgpet || 0);
+
+                const total_balance = tgp_balance + tgpet_balance;
+
+                const upgrade_cost = config_farm_data[`cost_level_${pet.level + 1}`];
+
+                if (total_balance >= upgrade_cost) {
+                    res.status(404).json({ message: 'Not found.', status: 'PET_MAX_LEVEL' });
+                    return;
+                };
+
+                let $USER_FILTER, $USER_UPDATE, $PET_UPDATE, $LOG_INSERT, $RESPONSE;
+
+                if (tgp_balance >= upgrade_cost) {
+                    $USER_FILTER = { 'balances.tgp': { $gte: upgrade_cost } };
+                    $USER_UPDATE = { $inc: { 'balances.tgp': -upgrade_cost } };
+                } else {
+                    const tgpet_cost = upgrade_cost - tgp_balance;
+
+                    $USER_FILTER = { 'balances.tgp': { $gte: tgp_balance }, 'balances.tgpet': { $gte: tgpet_cost } };
+                    $USER_UPDATE = { $inc: { 'balances.tgp': -tgp_balance, 'balances.tgpet': -tgpet_cost } };
+                }
+
+                const date_timestamp = Date.now();
+                const mana_timestamp = pet.mana.getTime();
+                const farm_timestamp = pet.farm_at?.getTime();
+
+                if (farm_timestamp && date_timestamp >= mana_timestamp) {
+
+                    const farm_speed = (pet.accumulate_total_cost - config_farm_data.x_average_TGP) / config_farm_data.y_day_to_break_even;
+
+                    const farm_points = ((mana_timestamp - farm_timestamp) / (24 * 60 * 60 * 1000)) * farm_speed;
+
+                    const boost_points = caculateFarmBoost(date_timestamp, [pet], user?.boosts || []);
+
+                    const total_points = farm_points + boost_points;
+
+                    $PET_UPDATE = { $unset: { farm_at: 1 }, $inc: { level: 1, balance: total_points } };
+
+                    $LOG_INSERT = { tgp_balance, tgpet_balance, total_balance, farm_points, boost_points, total_points };
+
+                    $RESPONSE = { total_points, tgp_balance, tgpet_balance };
+                } else {
+                    $PET_UPDATE = { $unset: { farm_at: 1 }, $inc: { level: 1 } };
+
+                    $LOG_INSERT = { tgp_balance, tgpet_balance, total_balance };
+
+                    $RESPONSE = { tgp_balance, tgpet_balance };
+                }
+                
+                const [update_user_result, update_pet_result, insert_log_result] = await Promise.all([
+                    userCollection.findOneAndUpdate({ tele_id: tele_user.tele_id, ...$USER_FILTER }, { ...$USER_UPDATE }, { session, projection: { _id: 1 }, returnDocument: 'after' }),
+                    petCollection.updateOne({ _id: pet._id }, { ...$PET_UPDATE }, { session }),
+                    logCollection.insertOne({ log_type: 'game/upgrade', tele_id: tele_user.tele_id, from_level: pet.level, to_level: pet.level + 1, upgrade_cost, pet_before: pet, created_at: new Date(date_timestamp), ...$LOG_INSERT })
+                ]);
+    
+                if (
+                    update_user_result !== null &&
+                    update_pet_result.modifiedCount > 0 &&
+                    insert_log_result.acknowledged === true
+                ) {
+                    await session.commitTransaction();
+                };
+
+                res.status(200).json($RESPONSE);
+            } catch (error) {
+                await session.abortTransaction();
+                res.status(500).json({ message: 'Internal server error.' });
+            } finally {
+                await session.endSession();
+                await redisWrapper.delete(REDIS_KEY, tele_user.tele_id);
+            };
     });
 }
