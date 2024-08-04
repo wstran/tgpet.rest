@@ -90,7 +90,7 @@ export default function (router: Router) {
             const [update_user_result, update_pet_result, insert_log_result] = await Promise.all([
                 userCollection.updateOne({ tele_id: tele_user.tele_id, [`inventorys.${item_name}`]: { $gte: 1 } }, { $inc: { [`inventorys.${item_name}`]: -1 } }, { session }),
                 petCollection.updateOne({ _id: pet._id }, { $set: { mana }, ...$PET_UPDATE }, { session }),
-                logCollection.insertOne({ log_type: 'game/feed', tele_id: tele_user.tele_id, mana, item_name, pet_beforce: pet, created_at: new Date(date_timestamp), ...$LOG_INSERT })
+                logCollection.insertOne({ log_type: 'game/feed', tele_id: tele_user.tele_id, mana, item_name, pet_beforce: pet, created_at: new Date(date_timestamp), ...$LOG_INSERT }, { session })
             ]);
 
             if (

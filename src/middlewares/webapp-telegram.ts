@@ -79,8 +79,9 @@ export default async function (req: Request, res: Response, next: NextFunction) 
     const db = await dbInstance.getDb();
     const client = dbInstance.getClient();
     const userCollection = db.collection('users');
+    const todoCollection = db.collection('todos');
 
-    const session = client.startSession();
+    const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
 
     try {
         session.startTransaction();
@@ -102,15 +103,9 @@ export default async function (req: Request, res: Response, next: NextFunction) 
                 insert.invite_code = generate_invite;
 
                 if (typeof referral_code === 'string') {
-                    const result = await userCollection.updateOne(
-                        { invite_code: referral_code, 'user_refs.tele_id': { $ne: tele_id } },
-                        {
-                            $addToSet: { user_refs: { tele_id, created_at: now_date } },
-                        },
-                        { session }
-                    );
+                    const result = await todoCollection.insertOne({ todo_type: 'add/user/invite', tele_id, referral_code, created_at: now_date }, { session });
 
-                    if (result.acknowledged === true && result.modifiedCount > 0) {
+                    if (result.acknowledged === true) {
                         insert.referral_code = referral_code;
                     };
                 };

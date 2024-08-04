@@ -23,15 +23,15 @@ export default function (router: Router) {
         const client = dbInstance.getClient();
         const userCollection = db.collection('users');
         const petCollection = db.collection('pets');
-        const logCollection = db.collection('logs');
         const todoCollection = db.collection('todos');
+        const logCollection = db.collection('logs');
 
         const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
 
         try {
             session.startTransaction();
             const [user, pets] = await Promise.all([
-                userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, referral_code: 1, boosts: 1 } }),
+                userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, referral_code: 1, boosts: 1 }, session }),
                 petCollection.find({ tele_id: tele_user.tele_id }, { session }).project({ _id: 1, type: 1, farm_at: 1, mana: 1, balance: 1, accumulate_total_cost: 1 }).toArray()
             ]) as [WithId<Document> | null, Pet[]];
 

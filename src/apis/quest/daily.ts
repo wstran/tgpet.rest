@@ -8,7 +8,7 @@ const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.
 const REDIS_KEY = 'TPET_API';
 
 export default function (router: Router) {
-    router.post('/referral/claim', Middleware, async (req, res) => {
+    router.post('/quest/daily', Middleware, async (req, res) => {
         const tele_user = (req as RequestWithUser).tele_user;
 
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
@@ -29,16 +29,7 @@ export default function (router: Router) {
         try {
             session.startTransaction();
 
-           /*  const user = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, invite_code: 1 }, session });
 
-            if (user === null) {
-                res.status(404).json({ message: 'Not found.' });
-                return;
-            };
-
-            const referral_count = await userCollection.countDocuments({ referral_code: user.invite_code, referral_claimed: { $exists: false } }, { session }); */
-
-            
         } catch (error) {
             await session.abortTransaction();
             res.status(500).json({ message: 'Internal server error.' });

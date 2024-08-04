@@ -93,6 +93,7 @@ app.listen(port, () => {
   // indexes of users
   await userCollection.createIndex({ tele_id: 1 }, { unique: true });
   await userCollection.createIndex({ invite_code: 1 }, { unique: true });
+  await userCollection.createIndex({ referral_code: 1 }, { sparse: true });
   await userCollection.createIndex({ username: 1 }, { sparse: true });
   await userCollection.createIndex({ 'user_refs.tele_id': 1 }, { unique: true, sparse: true });
   await userCollection.createIndex({ 'user_refs.verified': 1 }, { sparse: true });
