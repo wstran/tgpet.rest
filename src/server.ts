@@ -7,7 +7,6 @@ import RateLimit from 'express-rate-limit';
 import RedisStore from 'rate-limit-redis';
 import Redis from 'ioredis';
 import './config';
-// import bot from './bot';
 
 if (
   !process.env.PORT_BE ||
@@ -22,13 +21,6 @@ if (
 
 const app = express();
 const port = process.env.PORT_BE || 8000;
-/* const secretPath = `/telegraf/${bot.secretPathComponent()}`;
-
-if (process.env.NODE_ENV === 'production') {
-  bot.telegram.setWebhook(`${process.env.WEBHOOK_URL}${secretPath}`);
-
-  app.use(bot.webhookCallback(secretPath));
-}; */
 
 const redisClient = new Redis(process.env.REDIS_URL, { retryStrategy: (times) => Math.min(times * 50, 2000) });
 
@@ -74,7 +66,6 @@ app.use('/api', Apis);
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
-  // console.log(`Webhook set to ${process.env.WEBHOOK_URL}${secretPath}`);
 });
 
 // create index
