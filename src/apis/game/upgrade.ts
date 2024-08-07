@@ -15,15 +15,13 @@ export default function (router: Router) {
         const { pet_id } = req.body;
 
         if (typeof pet_id !== 'string') {
-            res.status(400).json({ message: 'Bad request.' });
-            return;
+            return res.status(400).json({ message: 'Bad request.' });
         };
 
-        const tele_user = (req as RequestWithUser).tele_user;
+        const { tele_user } = req as RequestWithUser;
 
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
-            res.status(429).json({ message: 'Too many requests.' });
-            return;
+            return res.status(429).json({ message: 'Too many requests.' });
         };
 
         const dbInstance = Database.getInstance();
@@ -46,18 +44,15 @@ export default function (router: Router) {
                 ]);
 
                 if (user === null) {
-                    res.status(404).json({ message: 'Not found.' });
-                    return;
+                    return res.status(404).json({ message: 'Not found.' });
                 };
 
                 if (pet === null) {
-                    res.status(404).json({ message: 'Not found.', status: 'PET_NOT_FOUND' });
-                    return;
+                    return res.status(404).json({ message: 'Not found.', status: 'PET_NOT_FOUND' });
                 };
 
                 if (pet.level === 50) {
-                    res.status(404).json({ message: 'Not found.', status: 'PET_MAX_LEVEL' });
-                    return;
+                    return res.status(404).json({ message: 'Not found.', status: 'PET_MAX_LEVEL' });
                 };
 
                 const config_farm_data = CONFIG.GET('farm_data');
@@ -71,8 +66,7 @@ export default function (router: Router) {
                 const upgrade_cost = config_farm_data[`cost_level_${pet.level + 1}`];
 
                 if (total_balance < upgrade_cost) {
-                    res.status(404).json({ message: 'Not found.', status: 'NOT_ENOUGH_MONEY' });
-                    return;
+                    return res.status(404).json({ message: 'Not found.', status: 'NOT_ENOUGH_MONEY' });
                 };
 
                 let $USER_FILTER, $USER_UPDATE, $PET_UPDATE, $LOG_INSERT, $RESPONSE;
@@ -136,15 +130,16 @@ export default function (router: Router) {
                     insert_log_result.acknowledged === true
                 ) {
                     await session.commitTransaction();
-                };
 
-                res.status(200).json($RESPONSE);
+                    return res.status(200).json($RESPONSE);
+                };
             } catch (error) {
                 await session.abortTransaction();
-                res.status(500).json({ message: 'Internal server error.' });
             } finally {
                 await session.endSession();
                 await redisWrapper.delete(REDIS_KEY, tele_user.tele_id);
             };
+
+            return res.status(500).json({ message: 'Internal server error.' });
     });
 }

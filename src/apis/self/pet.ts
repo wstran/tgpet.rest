@@ -17,13 +17,12 @@ export interface User {
 
 export default function (router: Router) {
     router.get('/self/pet', Middleware, async (req, res) => {
-        const tele_user = (req as RequestWithUser).tele_user;
+        const { tele_user } = req as RequestWithUser;
 
         const { page, limit } = req.params;
 
         if (typeof page !== 'number' || typeof limit !== 'number' || page < 1 || limit < 1 || limit > 10) {
-            res.status(400).json({ message: 'Bad request.' });
-            return;
+            return res.status(400).json({ message: 'Bad request.' });
         };
 
         try {
@@ -33,9 +32,9 @@ export default function (router: Router) {
 
             const pets = await petCollection.find({ tele_id: tele_user.tele_id }).skip(page).limit(limit).toArray();
 
-            res.status(200).json(pets);
+            return res.status(200).json(pets);
         } catch (error) {
-            res.status(500).json({ message: 'Internal server error.' });
+            return res.status(500).json({ message: 'Internal server error.' });
         };
     });
 }

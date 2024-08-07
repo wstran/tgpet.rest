@@ -6,10 +6,10 @@ import { RedisWrapper } from '../../libs/redis-wrapper';
 const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 
 const REDIS_KEY = 'TPET_API';
-
+// DEV
 export default function (router: Router) {
     router.post('/referral/claim', Middleware, async (req, res) => {
-        const tele_user = (req as RequestWithUser).tele_user;
+        const { tele_user } = req as RequestWithUser;
 
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
             res.status(429).json({ message: 'Too many requests.' });

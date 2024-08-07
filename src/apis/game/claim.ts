@@ -11,11 +11,10 @@ const REDIS_KEY = 'TPET_API';
 
 export default function (router: Router) {
     router.post('/game/claim', Middleware, async (req, res) => {
-        const tele_user = (req as RequestWithUser).tele_user;
+        const { tele_user } = req as RequestWithUser;
 
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
-            res.status(429).json({ message: 'Too many requests.' });
-            return;
+            return res.status(429).json({ message: 'Too many requests.' });
         };
 
         const dbInstance = Database.getInstance();
@@ -30,6 +29,7 @@ export default function (router: Router) {
 
         try {
             session.startTransaction();
+
             const [user, pets] = await Promise.all([
                 userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, referral_code: 1, boosts: 1 }, session }),
                 petCollection.find({ tele_id: tele_user.tele_id }, { session }).project({ _id: 1, type: 1, farm_at: 1, mana: 1, balance: 1, accumulate_total_cost: 1 }).toArray()
@@ -61,16 +61,17 @@ export default function (router: Router) {
                     insert_log_result.acknowledged === true
                 ) {
                     await session.commitTransaction();
+
+                    return res.status(200).json({ total_points });
                 };
             };
-
-            res.status(200).json({ total_points });
         } catch (error) {
             await session.abortTransaction();
-            res.status(500).json({ message: 'Internal server error.' });
         } finally {
             await session.endSession();
             await redisWrapper.delete(REDIS_KEY, tele_user.tele_id);
         };
+
+        return res.status(500).json({ message: 'Internal server error.' });
     });
 }

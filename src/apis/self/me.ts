@@ -20,7 +20,7 @@ const not_allows = ['wallet'];
 
 export default function (router: Router) {
     router.get('/self/me', Middleware, async (req, res) => {
-        const tele_user = (req as RequestWithUser).tele_user;
+        const { tele_user } = req as RequestWithUser;
 
         try {
             const dbInstance = Database.getInstance();
@@ -47,8 +47,7 @@ export default function (router: Router) {
                 }) as User | null;
 
             if (user === null) {
-                res.status(403).json({ message: 'Invalid user data.' });
-                return;
+                return res.status(403).json({ message: 'Invalid user data.' });
             };
 
             let config = (config_project === '*' ? CONFIG.config : config_project?.split(' ').map(i => CONFIG.GET(i))) as Config[];
@@ -57,9 +56,9 @@ export default function (router: Router) {
 
             if (config) results.config = config;
 
-            res.status(200).json(results);
+            return res.status(200).json(results);
         } catch (error) {
-            res.status(500).json({ message: 'Internal server error.' });
+            return res.status(500).json({ message: 'Internal server error.' });
         };
     });
 }

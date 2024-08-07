@@ -4,7 +4,6 @@ import Database from '../../libs/database';
 import { RedisWrapper } from '../../libs/redis-wrapper';
 
 const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
-
 const REDIS_KEY = 'TPET_API';
 
 export default function (router: Router) {
@@ -12,18 +11,16 @@ export default function (router: Router) {
         const { amount, invoice_id } = req.body;
 
         if (
-            typeof amount !== 'number' || isNaN(amount) || amount < 0 || amount > 50
-            || typeof invoice_id !== 'string' || invoice_id.length !== 17
+            typeof amount !== 'number' || isNaN(amount) || amount < 0 || amount > 50 ||
+            typeof invoice_id !== 'string' || invoice_id.length !== 17
         ) {
-            res.status(401).json({ message: 'Bad request.' });
-            return;
+            return res.status(401).json({ message: 'Bad request.' });
         };
 
-        const tele_user = (req as RequestWithUser).tele_user;
+        const { tele_user } = req as RequestWithUser;
 
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
-            res.status(429).json({ message: 'Too many requests.' });
-            return;
+            return res.status(429).json({ message: 'Too many requests.' });
         };
 
         const dbInstance = Database.getInstance();
@@ -39,17 +36,15 @@ export default function (router: Router) {
 
             const get_convert = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, is_converting: 1 }, session });
 
-            if (get_convert !== null) {
-                if (get_convert.is_converting === true) {
-                    res.status(404).json({ message: 'You are converting.' });
-                    return;
-                };
+            if (get_convert?.is_converting === true) {
+                return res.status(404).json({ message: 'You are converting.' });
+            };
 
-                const created_at = new Date();
+            const created_at = new Date();
+            const estimate_at = new Date(created_at.getTime() + (1000 * 60 * 5));
 
-                const estimate_at = new Date(created_at.getTime() + (1000 * 60 * 5));
-
-                const add_todo_result = await todoCollection.updateOne(
+            const [add_todo_result, update_user_result] = await Promise.all([
+                todoCollection.updateOne(
                     { todo_type: 'onchain/convert', tele_id: tele_user.tele_id, status: 'pending' },
                     {
                         $setOnInsert: {
@@ -63,31 +58,27 @@ export default function (router: Router) {
                         },
                     },
                     { upsert: true, session },
-                );
+                ),
+                userCollection.updateOne(
+                    { tele_id: tele_user.tele_id },
+                    { $set: { is_converting: true, convert_estimate_at: estimate_at } },
+                    { session },
+                ),
+            ]);
 
-                if (add_todo_result.acknowledged === true && add_todo_result.upsertedCount > 0) {
-                    const update_user_result = await userCollection.updateOne(
-                        { tele_id: tele_user.tele_id },
-                        { $set: { is_converting: true, convert_estimate_at: estimate_at } },
-                        { session },
-                    );
-
-                    if (
-                        update_user_result.acknowledged === true &&
-                        update_user_result.modifiedCount > 0
-                    ) {
-                        await session.commitTransaction();
-
-                        res.status(200).end();
-                    };
-                };
+            if (add_todo_result.acknowledged === true && add_todo_result.upsertedCount > 0 &&
+                update_user_result.acknowledged === true && update_user_result.modifiedCount > 0) {
+                await session.commitTransaction();
+                
+                return res.status(200).end();
             };
         } catch (error) {
             await session.abortTransaction();
-            res.status(500).json({ message: 'Internal server error.' });
         } finally {
             await session.endSession();
             await redisWrapper.delete(REDIS_KEY, tele_user.tele_id);
         };
+
+        return res.status(500).json({ message: 'Internal server error.' });
     });
 }

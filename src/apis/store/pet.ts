@@ -17,15 +17,13 @@ export default function (router: Router) {
         const pet = config_game_pets.pets[pet_name];
 
         if (typeof pet_name !== 'string' || typeof pet_level !== 'number' || pet_level < 1 || pet_level > 50) {
-            res.status(400).json({ message: 'Bad request.' });
-            return;
+            return res.status(400).json({ message: 'Bad request.' });
         };
 
-        const tele_user = (req as RequestWithUser).tele_user;
+        const { tele_user } = req as RequestWithUser;
 
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
-            res.status(429).json({ message: 'Too many requests.' });
-            return;
+            return res.status(429).json({ message: 'Too many requests.' });
         };
 
         const dbInstance = Database.getInstance();
@@ -43,8 +41,7 @@ export default function (router: Router) {
             const user = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, balances: 1 }, session });
 
             if (user === null) {
-                res.status(404).json({ message: 'Not found.' });
-                return;
+                return res.status(404).json({ message: 'Not found.' });
             };
 
             const tgp_balance = (user.balances?.tgp || 0);
@@ -56,8 +53,7 @@ export default function (router: Router) {
             const total_cost = CONFIG.GET('farm_data')[`cost_level_${pet_level}`];
 
             if (total_balance < total_cost) {
-                res.status(404).json({ message: 'Not found.', status: 'MONEY_ENOUGH_MONEY' });
-                return;
+                return res.status(404).json({ message: 'Not found.', status: 'MONEY_ENOUGH_MONEY' });
             };
 
             let $USER_FILTER, $USER_UPDATE, $LOG_INSERT, $RESPONSE;
@@ -96,15 +92,16 @@ export default function (router: Router) {
                 insert_log_result.acknowledged === true
             ) {
                 await session.commitTransaction();
-            };
 
-            res.status(200).json($RESPONSE);
+                return res.status(200).json($RESPONSE);
+            };
         } catch (error) {
             await session.abortTransaction();
-            res.status(500).json({ message: 'Internal server error.' });
         } finally {
             await session.endSession();
             await redisWrapper.delete(REDIS_KEY, tele_user.tele_id);
         };
+
+        return res.status(500).json({ message: 'Internal server error.' });
     });
 }
