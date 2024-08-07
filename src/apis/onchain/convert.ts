@@ -8,7 +8,7 @@ const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.
 const REDIS_KEY = 'TPET_API';
 
 export default function (router: Router) {
-    router.post('/onchain/repay', Middleware, async (req, res) => {
+    router.post('/onchain/convert', Middleware, async (req, res) => {
         const { amount, invoice_id } = req.body;
 
         if (
@@ -30,20 +30,18 @@ export default function (router: Router) {
         const db = await dbInstance.getDb();
         const client = dbInstance.getClient();
         const userCollection = db.collection('users');
-        const petCollection = db.collection('pets');
         const todoCollection = db.collection('todos');
-        const logCollection = db.collection('logs');
 
         const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
 
         try {
             session.startTransaction();
 
-            const get_repay = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, is_repaying: 1 }, session });
+            const get_convert = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, is_converting: 1 }, session });
 
-            if (get_repay !== null) {
-                if (get_repay.is_repaying === true) {
-                    res.status(404).json({ message: 'You are repaying.' });
+            if (get_convert !== null) {
+                if (get_convert.is_converting === true) {
+                    res.status(404).json({ message: 'You are converting.' });
                     return;
                 };
 
@@ -52,10 +50,10 @@ export default function (router: Router) {
                 const estimate_at = new Date(created_at.getTime() + (1000 * 60 * 5));
 
                 const add_todo_result = await todoCollection.updateOne(
-                    { todo_type: 'onchain/repay', tele_id: tele_user.tele_id, status: 'pending' },
+                    { todo_type: 'onchain/convert', tele_id: tele_user.tele_id, status: 'pending' },
                     {
                         $setOnInsert: {
-                            todo_type: 'repay_balance',
+                            todo_type: 'onchain/convert',
                             tele_id: tele_user.tele_id,
                             invoice_id: invoice_id,
                             status: 'pending',
@@ -67,10 +65,21 @@ export default function (router: Router) {
                     { upsert: true, session },
                 );
 
-                const is_uppserted = add_todo_result.acknowledged === true && add_todo_result.upsertedCount > 0;
+                if (add_todo_result.acknowledged === true && add_todo_result.upsertedCount > 0) {
+                    const update_user_result = await userCollection.updateOne(
+                        { tele_id: tele_user.tele_id },
+                        { $set: { is_converting: true, convert_estimate_at: estimate_at } },
+                        { session },
+                    );
 
-                if (is_uppserted) {
-                    // todo
+                    if (
+                        update_user_result.acknowledged === true &&
+                        update_user_result.modifiedCount > 0
+                    ) {
+                        await session.commitTransaction();
+
+                        res.status(200).end();
+                    };
                 };
             };
         } catch (error) {

@@ -30,9 +30,7 @@ export default function (router: Router) {
         const db = await dbInstance.getDb();
         const client = dbInstance.getClient();
         const userCollection = db.collection('users');
-        const petCollection = db.collection('pets');
         const todoCollection = db.collection('todos');
-        const logCollection = db.collection('logs');
 
         const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
 
@@ -55,7 +53,7 @@ export default function (router: Router) {
                     { todo_type: 'onchain/borrow', tele_id: tele_user.tele_id, status: 'pending' },
                     {
                         $setOnInsert: {
-                            todo_type: 'borrow_balance',
+                            todo_type: 'onchain/borrow',
                             tele_id: tele_user.tele_id,
                             invoice_id: invoice_id,
                             status: 'pending',
@@ -67,10 +65,21 @@ export default function (router: Router) {
                     { upsert: true, session },
                 );
 
-                const is_uppserted = add_todo_result.acknowledged === true && add_todo_result.upsertedCount > 0;
+                if (add_todo_result.acknowledged === true && add_todo_result.upsertedCount > 0) {
+                    const update_user_result = await userCollection.updateOne(
+                        { tele_id: tele_user.tele_id },
+                        { $set: { is_borrowing: true, borrow_estimate_at: estimate_at } },
+                        { session },
+                    );
 
-                if (is_uppserted) {
-                   // todo
+                    if (
+                        update_user_result.acknowledged === true &&
+                        update_user_result.modifiedCount > 0
+                    ) {
+                        await session.commitTransaction();
+
+                        res.status(200).end();
+                    };
                 };
             };
         } catch (error) {
