@@ -103,7 +103,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
                 insert.invite_code = generate_invite;
 
                 if (typeof referral_code === 'string') {
-                    const result = await todoCollection.insertOne({ todo_type: 'add/user/invite', tele_id, referral_code, created_at: now_date }, { session });
+                    const result = await todoCollection.insertOne({ todo_type: 'add/user/invite', status: "pending", tele_id, referral_code, created_at: now_date }, { session });
 
                     if (result.acknowledged === true) {
                         insert.referral_code = referral_code;
