@@ -12,7 +12,7 @@ export default function (router: Router) {
         const { amount } = req.body;
 
         if (
-            typeof amount !== 'number' || isNaN(amount) || amount < 0 || amount > 100000
+            typeof amount !== 'number' || isNaN(amount) || amount < 0 || amount > 5000000000
         ) {
             return res.status(401).json({ message: 'Bad request.' });
         };
@@ -43,6 +43,7 @@ export default function (router: Router) {
             const created_at = new Date();
             const estimate_at = new Date(created_at.getTime() + (1000 * 60 * 5));
             const invoice_id = 'B' + generateRandomNumber(16);
+            const onchain_amount = (amount * 1000000000).toString();
 
             const [add_todo_result, update_user_result] = await Promise.all([
                 todoCollection.updateOne(
@@ -54,7 +55,7 @@ export default function (router: Router) {
                             invoice_id: invoice_id,
                             status: 'pending',
                             amount: amount,
-                            onchain_amount: (amount * 1000000000).toString(),
+                            onchain_amount: onchain_amount,
                             estimate_at,
                             created_at,
                         },
@@ -72,7 +73,7 @@ export default function (router: Router) {
                 update_user_result.acknowledged === true && update_user_result.modifiedCount > 0) {
                 await session.commitTransaction();
 
-                return res.status(200).json({ invoice_id });
+                return res.status(200).json({ invoice_id, onchain_amount });
             };
         } catch (error) {
             await session.abortTransaction();

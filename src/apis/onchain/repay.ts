@@ -2,7 +2,6 @@ import { Router } from 'express';
 import Middleware, { RequestWithUser } from '../../middlewares/webapp-telegram';
 import Database from '../../libs/database';
 import { RedisWrapper } from '../../libs/redis-wrapper';
-import { generateRandomNumber } from '../../libs/custom';
 
 const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 const REDIS_KEY = 'TPET_API';
@@ -12,7 +11,7 @@ export default function (router: Router) {
         const { amount } = req.body;
 
         if (
-            typeof amount !== 'number' || isNaN(amount) || amount < 0 || amount > 100000
+            typeof amount !== 'number' || isNaN(amount) || amount < 0 || amount > 5000000000
         ) {
             return res.status(401).json({ message: 'Bad request.' });
         };
@@ -34,15 +33,27 @@ export default function (router: Router) {
         try {
             session.startTransaction();
 
-            const get_repay = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, is_repaying: 1 }, session });
+            const get_repay = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, is_repaying: 1, "balances.tgpet": 1, ton_mortgage_amount: 1, tgpet_borrowed_amount: 1 }, session });
 
-            if (get_repay?.is_repaying === true) {
+            if (get_repay === null || get_repay.is_repaying === true) {
                 return res.status(404).json({ message: 'You are repaying.' });
             };
 
             const created_at = new Date();
-            const estimate_at = new Date(created_at.getTime() + (1000 * 60 * 5));
-            const invoice_id = 'B' + generateRandomNumber(16);
+
+            if (get_repay.balances.tgpet < amount) {
+                return res.status(404).json({ message: 'You do not have enough TGPET.' });
+            };
+
+            if (get_repay.tgpet_borrowed_amount < amount) {
+                return res.status(404).json({ message: 'You do not have enough borrowed TGPET.' });
+            };
+
+            const conversion_value = get_repay.ton_mortgage_amount / get_repay.tgpet_borrowed_amount;
+
+            const repay_ton_amount = amount / conversion_value;
+
+            const onchain_amount = repay_ton_amount.toFixed(9);
 
             const [add_todo_result, update_user_result] = await Promise.all([
                 todoCollection.updateOne(
@@ -51,19 +62,31 @@ export default function (router: Router) {
                         $setOnInsert: {
                             todo_type: 'onchain/repay',
                             tele_id: tele_user.tele_id,
-                            invoice_id: invoice_id,
                             status: 'pending',
                             amount: amount,
-                            onchain_amount: (amount * 1000000000).toString(),
-                            estimate_at,
+                            repay_ton_amount,
+                            onchain_amount,
                             created_at,
                         },
                     },
                     { upsert: true, session },
                 ),
                 userCollection.updateOne(
-                    { tele_id: tele_user.tele_id },
-                    { $set: { is_repaying: true, repay_estimate_at: estimate_at } },
+                    {
+                        tele_id: tele_user.tele_id,
+                        "balances.tgpet": { $gte: amount },
+                        ton_mortgage_amount: { $gte: repay_ton_amount },
+                        tgpet_borrowed_amount: { $gte: amount },
+                    },
+                    {
+                        $set: { is_repaying: true },
+                        $inc: {
+                            "balances.tgpet": -amount,
+                            ton_mortgage_amount: -repay_ton_amount,
+                            tgpet_borrowed_amount: -amount,
+                            "totals.tgpet_repayed_amount": amount,
+                        },
+                    },
                     { session },
                 ),
             ]);
@@ -72,7 +95,7 @@ export default function (router: Router) {
                 update_user_result.acknowledged === true && update_user_result.modifiedCount > 0) {
                 await session.commitTransaction();
 
-                return res.status(200).json({ invoice_id });
+                return res.status(200).json({ repay_ton_amount, created_at });
             };
         } catch (error) {
             await session.abortTransaction();
