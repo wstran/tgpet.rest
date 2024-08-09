@@ -2,17 +2,17 @@ import { Router } from 'express';
 import Middleware, { RequestWithUser } from '../../middlewares/webapp-telegram';
 import Database from '../../libs/database';
 import { RedisWrapper } from '../../libs/redis-wrapper';
+import { generateRandomNumber } from '../../libs/custom';
 
 const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 const REDIS_KEY = 'TPET_API';
 
 export default function (router: Router) {
     router.post('/onchain/repay', Middleware, async (req, res) => {
-        const { amount, invoice_id } = req.body;
+        const { amount } = req.body;
 
         if (
-            typeof amount !== 'number' || isNaN(amount) || amount < 0 || amount > 50 ||
-            typeof invoice_id !== 'string' || invoice_id.length !== 17
+            typeof amount !== 'number' || isNaN(amount) || amount < 0 || amount > 100000
         ) {
             return res.status(401).json({ message: 'Bad request.' });
         };
@@ -42,6 +42,7 @@ export default function (router: Router) {
 
             const created_at = new Date();
             const estimate_at = new Date(created_at.getTime() + (1000 * 60 * 5));
+            const invoice_id = 'B' + generateRandomNumber(16);
 
             const [add_todo_result, update_user_result] = await Promise.all([
                 todoCollection.updateOne(
@@ -53,6 +54,7 @@ export default function (router: Router) {
                             invoice_id: invoice_id,
                             status: 'pending',
                             amount: amount,
+                            onchain_amount: (amount * 1000000000).toString(),
                             estimate_at,
                             created_at,
                         },
@@ -69,8 +71,8 @@ export default function (router: Router) {
             if (add_todo_result.acknowledged === true && add_todo_result.upsertedCount > 0 &&
                 update_user_result.acknowledged === true && update_user_result.modifiedCount > 0) {
                 await session.commitTransaction();
-                
-                return res.status(200).end();
+
+                return res.status(200).json({ invoice_id });
             };
         } catch (error) {
             await session.abortTransaction();
