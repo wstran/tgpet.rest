@@ -37,15 +37,15 @@ export default function (router: Router) {
         try {
             session.startTransaction();
 
-            const user = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, [`daily_quests.${quest_id}`]: 1 }, session }) as { daily_quests?: Record<string, DailyType | undefined> } | null;
+            const user = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, [`quests.${quest_id}`]: 1 }, session }) as { quests?: Record<string, DailyType | undefined> } | null;
 
             if (user === null) {
                 return res.status(404).json({ message: 'Not found.' });
             };
 
-            user.daily_quests = user.daily_quests || {};
+            user.quests = user.quests || {};
 
-            const quest = user.daily_quests[quest_id];
+            const quest = user.quests[quest_id];
 
             const now_date = new Date();
 
@@ -61,21 +61,33 @@ export default function (router: Router) {
                 yester_day.setUTCHours(12, 0, 0, 0);
 
                 if (quest?.checkin_at.getTime() === yester_day.getTime()) {
-                    $USER_UPDATE = { $inc: { [`_quests.${quest_id}.streak`]: 1 } };
+                    $USER_UPDATE = { $inc: { [`quests.${quest_id}.streak`]: 1 } };
 
                     if (quest.streak + 1 > quest.max_streak) {
-                        $USER_UPDATE.$inc[`_quests.${quest_id}.max_streak`] = quest.streak + 1;
+                        $USER_UPDATE.$inc[`quests.${quest_id}.max_streak`] = quest.streak + 1;
                     };
                 } else {
-                    $USER_UPDATE = { $set: { [`_quests.${quest_id}.streak`]: 1 } };
+                    $USER_UPDATE = { $set: { [`quests.${quest_id}.streak`]: 1 } };
                 };
             } else {
                 return res.status(404).json({ message: 'Not found.' });
             };
 
+            const config_quest = config_daily_quests.quests[quest_id]._rewards as { [key: string]: { amount: number, type: 'food' | 'token' } };
+
+            let $inc;
+
+            for (const name in config_quest) {
+                if (config_quest[name].type === 'food') {
+                    $inc = { [`inventorys.${name}`]: config_quest[name].amount };
+                } else if (config_quest[name].type === 'token') {
+                    $inc = { [`balances.${name}`]: config_quest[name].amount };
+                };
+            };
+
             const [update_user_result, insert_log_result] = await Promise.all([
-                userCollection.updateOne({ tele_id: tele_user.tele_id }, { ...$USER_UPDATE, $set: { ...$USER_UPDATE?.$set, [`_quests.${quest_id}.checkin_at`]: now_date } }, { session }),
-                logCollection.insertOne({ log_type: 'quest/daily', tele_id: tele_user.tele_id, quest_id, quest, created_at: now_date }, { session })
+                userCollection.updateOne({ tele_id: tele_user.tele_id }, { ...$USER_UPDATE, $set: { ...$USER_UPDATE?.$set, [`quests.${quest_id}.checkin_at`]: now_date }, $inc: { ...$USER_UPDATE?.$inc, ...$inc } }, { session }),
+                logCollection.insertOne({ log_type: 'quest/daily', tele_id: tele_user.tele_id, quest_id, quest, _rewards: config_quest._rewards, created_at: now_date }, { session })
             ]);
 
             if (update_user_result.acknowledged === true &&
@@ -83,7 +95,7 @@ export default function (router: Router) {
                 insert_log_result.acknowledged === true) {
                 await session.commitTransaction();
 
-                return res.status(200).end();
+                return res.status(200).json({ created_at: now_date });
             }
         } catch (error) {
             await session.abortTransaction();

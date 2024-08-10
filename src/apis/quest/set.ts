@@ -37,15 +37,15 @@ export default function (router: Router) {
         try {
             session.startTransaction();
 
-            const user = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, [`onetime_quests.${quest_id}`]: 1 }, session }) as { onetime_quests?: Record<string, OneTimeType | undefined> } | null;
+            const user = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, [`quests.${quest_id}`]: 1 }, session }) as { quests?: Record<string, OneTimeType | undefined> } | null;
 
             if (user === null) {
                 return res.status(404).json({ message: 'Not found.' });
             };
 
-            user.onetime_quests = user.onetime_quests || {};
+            user.quests = user.quests || {};
 
-            const quest = user.onetime_quests[quest_id];
+            const quest = user.quests[quest_id];
 
             if (quest?.[action]) {
                 return res.status(404).json({ message: 'Not found.' });
@@ -53,16 +53,16 @@ export default function (router: Router) {
 
             const now_date = new Date();
 
-            const is_done = quest && Object.keys(config_onetime_quests.quests[quest_id]).findIndex((i) => !quest[i]) === -1;
+            const is_done = quest && Object.keys(config_onetime_quests.quests[quest_id]).findIndex((i) => ((!i.startsWith('_') && i !== action) ? !quest[i] : false)) === -1;
 
             const [update_user_result, insert_log_result] = await Promise.all([
                 userCollection.updateOne(
                     { tele_id: tele_user.tele_id },
                     {
                         $set: {
-                            [`ontime_quests.${quest_id}.${action}.created_at`]: now_date,
+                            [`quests.${quest_id}.${action}.created_at`]: now_date,
                             ...(is_done && {
-                                [`ontime_quests.${quest_id}._doned`]: 'pending_confirmation'
+                                [`quests.${quest_id}._doned`]: 'pending_confirmation'
                             })
                         }
                     }, { session }),
@@ -74,7 +74,7 @@ export default function (router: Router) {
                 insert_log_result.acknowledged === true) {
                 await session.commitTransaction();
 
-                return res.status(200).end();
+                return res.status(200).json({ created_at: now_date, is_done });
             };
         } catch (error) {
             await session.abortTransaction();

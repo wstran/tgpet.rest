@@ -37,15 +37,15 @@ export default function (router: Router) {
         try {
             session.startTransaction();
 
-            const user = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, [`onetime_quests.${quest_id}`]: 1 }, session }) as { onetime_quests?: Record<string, OneTimeType | undefined> } | null;
+            const user = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, [`quests.${quest_id}`]: 1 }, session }) as { quests?: Record<string, OneTimeType | undefined> } | null;
 
             if (user === null) {
                 return res.status(404).json({ message: 'Not found.' });
             };
 
-            user.onetime_quests = user.onetime_quests || {};
+            user.quests = user.quests || {};
 
-            const is_done = user.onetime_quests[quest_id]?._doned === 'pending_confirmation';
+            const is_done = user.quests[quest_id]?._doned === 'pending_confirmation';
 
             if (!is_done) {
                 return res.status(404).json({ message: 'Not found.' });
@@ -53,9 +53,21 @@ export default function (router: Router) {
 
             const now_date = new Date();
 
+            const config_quest = config_onetime_quests.quests[quest_id]._rewards as { [key: string]: { amount: number, type: 'food' | 'token' } };
+
+            let $inc;
+
+            for (const name in config_quest) {
+                if (config_quest[name].type === 'food') {
+                    $inc = { [`inventorys.${name}`]: config_quest[name].amount };
+                } else if (config_quest[name].type === 'token') {
+                    $inc = { [`balances.${name}`]: config_quest[name].amount };
+                };
+            };
+
             const [update_user_result, insert_log_result] = await Promise.all([
-                userCollection.updateOne({ tele_id: tele_user.tele_id }, { $set: { [`ontime_quests.${quest_id}._doned`]: now_date } }, { session }),
-                logCollection.insertOne({ log_type: 'quest/done', tele_id: tele_user.tele_id, quest_id, created_at: now_date }, { session })
+                userCollection.updateOne({ tele_id: tele_user.tele_id }, { $set: { [`quests.${quest_id}._doned`]: now_date }, ...({ $inc }) }, { session }),
+                logCollection.insertOne({ log_type: 'quest/done', tele_id: tele_user.tele_id, quest_id, _rewards: config_quest._rewards, created_at: now_date }, { session })
             ]);
 
             if (update_user_result.acknowledged === true &&
@@ -63,7 +75,7 @@ export default function (router: Router) {
                 insert_log_result.acknowledged === true) {
                 await session.commitTransaction();
 
-                return res.status(200).end();
+                return res.status(200).json({ created_at: now_date });
             };
         } catch (error) {
             await session.abortTransaction();
