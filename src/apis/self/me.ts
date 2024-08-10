@@ -37,7 +37,7 @@ export default function (router: Router) {
                     projection: {
                         _id: 0,
                         ...(
-                            user_projection.length === 0
+                            user_project === '*' || user_projection.length === 0
                                 ?
                                 not_allows.reduce((prev, current) => ({ ...prev, [current]: 0 }), {})
                                 :
@@ -46,13 +46,15 @@ export default function (router: Router) {
                     }
                 }) as User | null;
 
-            if (user === null) {
+            if (user === null && process.env.NODE_ENV !== 'development') {
                 return res.status(403).json({ message: 'Invalid user data.' });
             };
 
             let config = (config_project === '*' ? CONFIG.config : config_project?.split(' ').map(i => CONFIG.GET(i))) as Config[];
 
-            const results: { config?: Config[], user: User } = { user };
+            const results: { config?: Config[], user?: User } = {};
+
+            if (user) results.user = user;
 
             if (config) results.config = config;
 
