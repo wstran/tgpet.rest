@@ -11,15 +11,17 @@ export default function (router: Router) {
         const { amount } = req.body;
 
         if (
-            typeof amount !== 'number' || isNaN(amount) || amount < 0 || amount > 5000000000
+            typeof amount !== 'number' || isNaN(amount) || amount <= 0 || amount > 5000000000
         ) {
-            return res.status(401).json({ message: 'Bad request.' });
-        };
+            res.status(400).json({ message: 'Bad request.' });
+            return;
+        }
 
         const { tele_user } = req as RequestWithUser;
 
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
-            return res.status(429).json({ message: 'Too many requests.' });
+            res.status(429).json({ message: 'Too many requests.' });
+            return;
         };
 
         const dbInstance = Database.getInstance();
@@ -28,82 +30,97 @@ export default function (router: Router) {
         const userCollection = db.collection('users');
         const todoCollection = db.collection('todos');
 
-        const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
+        const session = client.startSession({
+            defaultTransactionOptions: {
+                readConcern: { level: 'local' },
+                writeConcern: { w: 1 },
+                retryWrites: false
+            }
+        });
 
         try {
-            session.startTransaction();
+            await session.withTransaction(async () => {
+                const get_repay = await userCollection.findOne(
+                    { tele_id: tele_user.tele_id },
+                    { projection: { is_repaying: 1, "balances.tgpet": 1, ton_mortgage_amount: 1, tgpet_borrowed_amount: 1 }, session }
+                );
 
-            const get_repay = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, is_repaying: 1, "balances.tgpet": 1, ton_mortgage_amount: 1, tgpet_borrowed_amount: 1 }, session });
+                if (!get_repay) {
+                    res.status(404).json({ message: 'User not found or not eligible for repayment.' });
+                    throw new Error('Transaction aborted: User not found or not eligible for repayment.');
+                };
 
-            if (get_repay === null || get_repay.is_repaying === true) {
-                return res.status(404).json({ message: 'You are repaying.' });
-            };
+                if (get_repay.is_repaying) {
+                    res.status(400).json({ message: 'You are already repaying.' });
+                    throw new Error('Transaction aborted: User is already repaying.');
+                };
 
-            const created_at = new Date();
+                if (get_repay.balances.tgpet < amount) {
+                    res.status(400).json({ message: 'You do not have enough TGPET.' });
+                    throw new Error('Transaction aborted: Insufficient TGPET balance.');
+                };
 
-            if (get_repay.balances.tgpet < amount) {
-                return res.status(404).json({ message: 'You do not have enough TGPET.' });
-            };
+                if (get_repay.tgpet_borrowed_amount < amount) {
+                    res.status(400).json({ message: 'You do not have enough borrowed TGPET.' });
+                    throw new Error('Transaction aborted: Insufficient borrowed TGPET.');
+                };
 
-            if (get_repay.tgpet_borrowed_amount < amount) {
-                return res.status(404).json({ message: 'You do not have enough borrowed TGPET.' });
-            };
+                const created_at = new Date();
+                const conversion_value = get_repay.ton_mortgage_amount / get_repay.tgpet_borrowed_amount;
+                const repay_ton_amount = amount / conversion_value;
+                const onchain_amount = repay_ton_amount.toFixed(9);
 
-            const conversion_value = get_repay.ton_mortgage_amount / get_repay.tgpet_borrowed_amount;
-
-            const repay_ton_amount = amount / conversion_value;
-
-            const onchain_amount = repay_ton_amount.toFixed(9);
-
-            const [add_todo_result, update_user_result] = await Promise.all([
-                todoCollection.updateOne(
-                    { todo_type: 'onchain/repay', tele_id: tele_user.tele_id, status: 'pending' },
-                    {
-                        $setOnInsert: {
-                            todo_type: 'onchain/repay',
+                const [add_todo_result, update_user_result] = await Promise.all([
+                    todoCollection.updateOne(
+                        { todo_type: 'onchain/repay', tele_id: tele_user.tele_id, status: 'pending' },
+                        {
+                            $setOnInsert: {
+                                todo_type: 'onchain/repay',
+                                tele_id: tele_user.tele_id,
+                                status: 'pending',
+                                amount: amount,
+                                repay_ton_amount,
+                                onchain_amount,
+                                created_at,
+                            },
+                        },
+                        { upsert: true, session }
+                    ),
+                    userCollection.updateOne(
+                        {
                             tele_id: tele_user.tele_id,
-                            status: 'pending',
-                            amount: amount,
-                            repay_ton_amount,
-                            onchain_amount,
-                            created_at,
+                            "balances.tgpet": { $gte: amount },
+                            ton_mortgage_amount: { $gte: repay_ton_amount },
+                            tgpet_borrowed_amount: { $gte: amount },
                         },
-                    },
-                    { upsert: true, session },
-                ),
-                userCollection.updateOne(
-                    {
-                        tele_id: tele_user.tele_id,
-                        "balances.tgpet": { $gte: amount },
-                        ton_mortgage_amount: { $gte: repay_ton_amount },
-                        tgpet_borrowed_amount: { $gte: amount },
-                    },
-                    {
-                        $set: { is_repaying: true },
-                        $inc: {
-                            "balances.tgpet": -amount,
-                            ton_mortgage_amount: -repay_ton_amount,
-                            tgpet_borrowed_amount: -amount,
-                            "totals.tgpet_repayed_amount": amount,
+                        {
+                            $set: { is_repaying: true },
+                            $inc: {
+                                "balances.tgpet": -amount,
+                                ton_mortgage_amount: -repay_ton_amount,
+                                tgpet_borrowed_amount: -amount,
+                                "totals.tgpet_repayed_amount": amount,
+                            },
                         },
-                    },
-                    { session },
-                ),
-            ]);
+                        { session }
+                    ),
+                ]);
 
-            if (add_todo_result.acknowledged === true && add_todo_result.upsertedCount > 0 &&
-                update_user_result.acknowledged === true && update_user_result.modifiedCount > 0) {
-                await session.commitTransaction();
-
-                return res.status(200).json({ repay_ton_amount, created_at });
-            };
+                if (add_todo_result.upsertedCount > 0 && update_user_result.modifiedCount > 0) {
+                    res.status(200).json({ repay_ton_amount, created_at });
+                } else {
+                    res.status(500).json({ message: 'Transaction failed to commit.' });
+                    throw new Error('Transaction failed to commit.');
+                };
+            });
         } catch (error) {
-            await session.abortTransaction();
+            console.error(error);
+            if (!res.headersSent) {
+                res.status(500).json({ message: 'Internal server error.' });
+            }
         } finally {
             await session.endSession();
             await redisWrapper.delete(REDIS_KEY, tele_user.tele_id);
         };
-
-        return res.status(500).json({ message: 'Internal server error.' });
     });
 }

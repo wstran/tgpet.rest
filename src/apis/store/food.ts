@@ -12,18 +12,20 @@ export default function (router: Router) {
     router.post('/store/food', Middleware, async (req, res) => {
         const { food_name, food_amount } = req.body;
 
-        const config_game_items = CONFIG.GET('game_items');
+        const config_store = CONFIG.GET('store');
 
-        const food = config_game_items.items[food_name];
+        const food = config_store.items[food_name];
 
         if (typeof food_name !== 'string' || !food || typeof food_amount !== 'number' || food_amount < 1 || food_amount > 1000) {
-            return res.status(400).json({ message: 'Bad request.' });
+            res.status(400).json({ message: 'Bad request. Invalid food name or amount.' });
+            return;
         };
 
         const { tele_user } = req as RequestWithUser;
 
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
-            return res.status(429).json({ message: 'Too many requests.' });
+            res.status(429).json({ message: 'Too many requests.' });
+            return;
         };
 
         const dbInstance = Database.getInstance();
@@ -32,71 +34,78 @@ export default function (router: Router) {
         const userCollection = db.collection('users');
         const logCollection = db.collection('logs');
 
-        const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
+        const session = client.startSession({
+            defaultTransactionOptions: {
+                readConcern: { level: 'local' },
+                writeConcern: { w: 1 },
+                retryWrites: false
+            }
+        });
 
         try {
-            session.startTransaction();
+            await session.withTransaction(async () => {
+                const user = await userCollection.findOne(
+                    { tele_id: tele_user.tele_id },
+                    { projection: { balances: 1 }, session }
+                );
 
-            const user = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, balances: 1 }, session });
+                if (!user) {
+                    res.status(404).json({ message: 'User not found.' });
+                    throw new Error('Transaction aborted: User not found.');
+                };
 
-            if (user === null) {
-                return res.status(404).json({ message: 'Not found.' });
-            };
+                const tgp_balance = user.balances?.tgp || 0;
+                const tgpet_balance = user.balances?.tgpet || 0;
+                const total_balance = tgp_balance + tgpet_balance;
+                const total_cost = food.cost * food_amount;
 
-            const tgp_balance = (user.balances?.tgp || 0);
+                if (total_balance < total_cost) {
+                    res.status(400).json({ message: 'Not enough money to purchase food.', status: 'NOT_ENOUGH_MONEY' });
+                    throw new Error('Transaction aborted: Not enough money.');
+                };
 
-            const tgpet_balance = (user.balances?.tgpet || 0);
+                let $USER_FILTER, $USER_UPDATE, $LOG_INSERT, $RESPONSE;
 
-            const total_balance = tgp_balance + tgpet_balance;
+                if (tgp_balance >= total_cost) {
+                    $USER_FILTER = { 'balances.tgp': { $gte: total_cost } };
+                    $USER_UPDATE = { $inc: { 'balances.tgp': -total_cost, 'totals.tgp_spent': total_cost, 'totals.tgp_spent_food': total_cost } };
+                    $LOG_INSERT = { tgp_cost: total_cost };
+                    $RESPONSE = { tgp_cost: total_cost };
+                } else {
+                    const tgpet_cost = total_cost - tgp_balance;
+                    $USER_FILTER = { 'balances.tgp': { $gte: tgp_balance }, 'balances.tgpet': { $gte: tgpet_cost } };
+                    $USER_UPDATE = { $inc: { 'balances.tgp': -tgp_balance, 'balances.tgpet': -tgpet_cost, 'totals.tgp_spent': tgp_balance, 'totals.tgp_spent_food': tgp_balance, 'totals.tgpet_spent': tgpet_cost, 'totals.tgpet_spent_food': tgpet_cost } };
+                    $LOG_INSERT = { tgp_cost: tgp_balance, tgpet_cost };
+                    $RESPONSE = { tgp_cost: tgp_balance, tgpet_cost };
+                };
 
-            const total_cost = food.cost * food_amount;
+                const [update_user_result, insert_log_result] = await Promise.all([
+                    userCollection.updateOne(
+                        { tele_id: tele_user.tele_id, ...$USER_FILTER },
+                        { ...$USER_UPDATE, $inc: { ...$USER_UPDATE.$inc, 'totals.spent': total_cost, 'totals.spent_food': total_cost, [`inventorys.${food_name}`]: food_amount } },
+                        { session }
+                    ),
+                    logCollection.insertOne(
+                        { log_type: 'store/food', tele_id: tele_user.tele_id, food_name, food_amount, total_cost, tgp_balance, tgpet_balance, total_balance, created_at: new Date(), ...$LOG_INSERT },
+                        { session }
+                    )
+                ]);
 
-            if (total_balance < total_cost) {
-                return res.status(404).json({ message: 'Not found.', status: 'MONEY_ENOUGH_MONEY' });
-            };
-
-            let $USER_FILTER, $USER_UPDATE, $LOG_INSERT, $RESPONSE;
-
-            if (tgp_balance >= total_cost) {
-                $USER_FILTER = { 'balances.tgp': { $gte: total_cost } };
-
-                $USER_UPDATE = { $inc: { 'balances.tgp': -total_cost, 'totals.tgp_spent': total_cost, 'totals.tgp_spent_food': total_cost } };
-
-                $LOG_INSERT = { tgp_cost: total_cost };
-
-                $RESPONSE = { tgp_cost: total_cost };
-            } else {
-                const tgpet_cost = total_cost - tgp_balance;
-
-                $USER_FILTER = { 'balances.tgp': { $gte: tgp_balance }, 'balances.tgpet': { $gte: tgpet_cost } };
-
-                $USER_UPDATE = { $inc: { 'balances.tgp': -tgp_balance, 'balances.tgpet': -tgpet_cost, 'totals.tgp_spent': tgp_balance, 'totals.tgp_spent_food': tgp_balance, 'totals.tgpet_spent': tgpet_cost, 'totals.tgpet_spent_food': tgpet_cost } };
-
-                $LOG_INSERT = { tgp_cost: tgp_balance, tgpet_cost };
-
-                $RESPONSE = { tgp_cost: tgp_balance, tgpet_cost };
-            };
-
-            const [update_user_result, insert_log_result] = await Promise.all([
-                userCollection.updateOne({ tele_id: tele_user.tele_id, ...$USER_FILTER }, { ...$USER_UPDATE, $inc: { ...$USER_UPDATE.$inc, 'totals.spent': total_cost, 'totals.spent_food': total_cost, [`inventorys.${food_name}`]: food_amount } }, { session }),
-                logCollection.insertOne({ log_type: 'store/food', tele_id: tele_user.tele_id, food_name, food_amount, total_cost, tgp_balance, tgpet_balance, total_balance, created_at: new Date(), ...$LOG_INSERT }, { session })
-            ]);
-
-            if (
-                update_user_result.modifiedCount > 0 &&
-                insert_log_result.acknowledged === true
-            ) {
-                await session.commitTransaction();
-
-                return res.status(200).json($RESPONSE);
-            };
+                if (update_user_result.modifiedCount > 0 && insert_log_result.acknowledged === true) {
+                    res.status(200).json($RESPONSE);
+                } else {
+                    res.status(500).json({ message: 'Transaction failed to commit.' });
+                    throw new Error('Transaction failed to commit.');
+                };
+            });
         } catch (error) {
-            await session.abortTransaction();
+            console.error(error);
+            if (!res.headersSent) {
+                res.status(500).json({ message: 'Internal server error.' });
+            }
         } finally {
             await session.endSession();
             await redisWrapper.delete(REDIS_KEY, tele_user.tele_id);
-        };
-
-        return res.status(500).json({ message: 'Internal server error.' });
+        }
     });
 }

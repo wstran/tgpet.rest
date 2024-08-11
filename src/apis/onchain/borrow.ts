@@ -12,15 +12,17 @@ export default function (router: Router) {
         const { amount } = req.body;
 
         if (
-            typeof amount !== 'number' || isNaN(amount) || amount < 0 || amount > 5000000000
+            typeof amount !== 'number' || isNaN(amount) || amount <= 0 || amount > 5000000000
         ) {
-            return res.status(401).json({ message: 'Bad request.' });
+            res.status(400).json({ message: 'Bad request.' });
+            return;
         };
 
         const { tele_user } = req as RequestWithUser;
 
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
-            return res.status(429).json({ message: 'Too many requests.' });
+            res.status(429).json({ message: 'Too many requests.' });
+            return;
         };
 
         const dbInstance = Database.getInstance();
@@ -29,59 +31,67 @@ export default function (router: Router) {
         const userCollection = db.collection('users');
         const todoCollection = db.collection('todos');
 
-        const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
+        const session = client.startSession({ 
+            defaultTransactionOptions: { 
+                readConcern: { level: 'local' }, 
+                writeConcern: { w: 1 }, 
+                retryWrites: false 
+            } 
+        });
 
         try {
-            session.startTransaction();
+            await session.withTransaction(async () => {
+                const get_borrow = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { is_borrowing: 1 }, session });
 
-            const get_borrow = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, is_borrowing: 1 }, session });
+                if (get_borrow?.is_borrowing) {
+                    res.status(400).json({ message: 'You are already borrowing.' });
+                    throw new Error('Transaction aborted: User is already borrowing.');
+                };
 
-            if (get_borrow?.is_borrowing === true) {
-                return res.status(404).json({ message: 'You are borrowing.' });
-            };
+                const created_at = new Date();
+                const estimate_at = new Date(created_at.getTime() + (1000 * 60 * 5));
+                const invoice_id = 'B' + generateRandomNumber(16);
+                const onchain_amount = (amount * 1000000000).toString();
 
-            const created_at = new Date();
-            const estimate_at = new Date(created_at.getTime() + (1000 * 60 * 5));
-            const invoice_id = 'B' + generateRandomNumber(16);
-            const onchain_amount = (amount * 1000000000).toString();
-
-            const [add_todo_result, update_user_result] = await Promise.all([
-                todoCollection.updateOne(
-                    { todo_type: 'onchain/borrow', tele_id: tele_user.tele_id, status: 'pending' },
-                    {
-                        $setOnInsert: {
-                            todo_type: 'onchain/borrow',
-                            tele_id: tele_user.tele_id,
-                            invoice_id: invoice_id,
-                            status: 'pending',
-                            amount: amount,
-                            onchain_amount: onchain_amount,
-                            estimate_at,
-                            created_at,
+                const [add_todo_result, update_user_result] = await Promise.all([
+                    todoCollection.updateOne(
+                        { todo_type: 'onchain/borrow', tele_id: tele_user.tele_id, status: 'pending' },
+                        {
+                            $setOnInsert: {
+                                todo_type: 'onchain/borrow',
+                                tele_id: tele_user.tele_id,
+                                invoice_id: invoice_id,
+                                status: 'pending',
+                                amount: amount,
+                                onchain_amount: onchain_amount,
+                                estimate_at,
+                                created_at,
+                            },
                         },
-                    },
-                    { upsert: true, session },
-                ),
-                userCollection.updateOne(
-                    { tele_id: tele_user.tele_id },
-                    { $set: { is_borrowing: true, borrow_estimate_at: estimate_at } },
-                    { session },
-                ),
-            ]);
+                        { upsert: true, session },
+                    ),
+                    userCollection.updateOne(
+                        { tele_id: tele_user.tele_id },
+                        { $set: { is_borrowing: true, borrow_estimate_at: estimate_at } },
+                        { session },
+                    ),
+                ]);
 
-            if (add_todo_result.acknowledged === true && add_todo_result.upsertedCount > 0 &&
-                update_user_result.acknowledged === true && update_user_result.modifiedCount > 0) {
-                await session.commitTransaction();
-
-                return res.status(200).json({ invoice_id, onchain_amount });
-            };
+                if (add_todo_result.upsertedCount > 0 && update_user_result.modifiedCount > 0) {
+                    res.status(200).json({ invoice_id, onchain_amount });
+                } else {
+                    res.status(500).json({ message: 'Transaction failed to commit.' });
+                    throw new Error('Transaction failed to commit.');
+                };
+            });
         } catch (error) {
-            await session.abortTransaction();
+            console.error(error);
+            if (!res.headersSent) {
+                res.status(500).json({ message: 'Internal server error.' });
+            };
         } finally {
             await session.endSession();
             await redisWrapper.delete(REDIS_KEY, tele_user.tele_id);
         };
-
-        return res.status(500).json({ message: 'Internal server error.' });
     });
 }

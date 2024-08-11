@@ -17,13 +17,15 @@ export default function (router: Router) {
         const config_onetime_quests = CONFIG.GET('game_onetime_quests');
 
         if (typeof quest_id !== 'string' || !config_onetime_quests.quests[quest_id]) {
-            return res.status(400).json({ message: 'Bad Request' });
+            res.status(400).json({ message: 'Bad request. Invalid quest ID.' });
+            return;
         };
 
         const { tele_user } = req as RequestWithUser;
 
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
-            return res.status(429).json({ message: 'Too many requests.' });
+            res.status(429).json({ message: 'Too many requests.' });
+            return;
         };
 
         const dbInstance = Database.getInstance();
@@ -32,58 +34,76 @@ export default function (router: Router) {
         const userCollection = db.collection('users');
         const logCollection = db.collection('logs');
 
-        const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
+        const session = client.startSession({
+            defaultTransactionOptions: {
+                readConcern: { level: 'local' },
+                writeConcern: { w: 1 },
+                retryWrites: false
+            }
+        });
 
         try {
-            session.startTransaction();
+            await session.withTransaction(async () => {
+                const user = await userCollection.findOne(
+                    { tele_id: tele_user.tele_id },
+                    { projection: { [`quests.${quest_id}`]: 1 }, session }
+                ) as { quests?: Record<string, OneTimeType | undefined> } | null;
 
-            const user = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, [`quests.${quest_id}`]: 1 }, session }) as { quests?: Record<string, OneTimeType | undefined> } | null;
-
-            if (user === null) {
-                return res.status(404).json({ message: 'Not found.' });
-            };
-
-            user.quests = user.quests || {};
-
-            const is_done = user.quests[quest_id]?._doned === 'pending_confirmation';
-
-            if (!is_done) {
-                return res.status(404).json({ message: 'Not found.' });
-            };
-
-            const now_date = new Date();
-
-            const config_quest = config_onetime_quests.quests[quest_id]._rewards as { [key: string]: { amount: number, type: 'food' | 'token' } };
-
-            let $inc;
-
-            for (const name in config_quest) {
-                if (config_quest[name].type === 'food') {
-                    $inc = { [`inventorys.${name}`]: config_quest[name].amount };
-                } else if (config_quest[name].type === 'token') {
-                    $inc = { [`balances.${name}`]: config_quest[name].amount };
+                if (!user) {
+                    res.status(404).json({ message: 'User not found.' });
+                    throw new Error('Transaction aborted: User not found.');
                 };
-            };
 
-            const [update_user_result, insert_log_result] = await Promise.all([
-                userCollection.updateOne({ tele_id: tele_user.tele_id }, { $set: { [`quests.${quest_id}._doned`]: now_date }, ...({ $inc }) }, { session }),
-                logCollection.insertOne({ log_type: 'quest/done', tele_id: tele_user.tele_id, quest_id, _rewards: config_quest._rewards, created_at: now_date }, { session })
-            ]);
+                user.quests = user.quests || {};
 
-            if (update_user_result.acknowledged === true &&
-                update_user_result.modifiedCount > 0 &&
-                insert_log_result.acknowledged === true) {
-                await session.commitTransaction();
+                const is_done = user.quests[quest_id]?._doned === 'pending_confirmation';
 
-                return res.status(200).json({ created_at: now_date });
-            };
+                if (!is_done) {
+                    res.status(400).json({ message: 'Quest not marked as pending confirmation.' });
+                    throw new Error('Transaction aborted: Quest not marked as pending confirmation.');
+                };
+
+                const now_date = new Date();
+
+                const config_quest = config_onetime_quests.quests[quest_id]._rewards as { [key: string]: { amount: number, type: 'food' | 'token' } };
+
+                const $inc: Record<string, number> = {};
+
+                for (const name in config_quest) {
+                    if (config_quest[name].type === 'food') {
+                        $inc[`inventorys.${name}`] = config_quest[name].amount;
+                    } else if (config_quest[name].type === 'token') {
+                        $inc[`balances.${name}`] = config_quest[name].amount;
+                    };
+                };
+
+                const [update_user_result, insert_log_result] = await Promise.all([
+                    userCollection.updateOne(
+                        { tele_id: tele_user.tele_id },
+                        { $set: { [`quests.${quest_id}._doned`]: now_date }, $inc },
+                        { session }
+                    ),
+                    logCollection.insertOne(
+                        { log_type: 'quest/done', tele_id: tele_user.tele_id, quest_id, _rewards: config_quest, created_at: now_date },
+                        { session }
+                    )
+                ]);
+
+                if (update_user_result.modifiedCount > 0 && insert_log_result.acknowledged === true) {
+                    res.status(200).json({ created_at: now_date });
+                } else {
+                    res.status(500).json({ message: 'Transaction failed to commit.' });
+                    throw new Error('Transaction failed to commit.');
+                };
+            });
         } catch (error) {
-            await session.abortTransaction();
+            console.error(error);
+            if (!res.headersSent) {
+                res.status(500).json({ message: 'Internal server error.' });
+            };
         } finally {
             await session.endSession();
             await redisWrapper.delete(REDIS_KEY, tele_user.tele_id);
         };
-
-        return res.status(500).json({ message: 'Internal server error.' });
     });
 }

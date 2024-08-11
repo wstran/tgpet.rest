@@ -19,9 +19,13 @@ export default function (router: Router) {
     router.get('/self/pet', Middleware, async (req, res) => {
         const { tele_user } = req as RequestWithUser;
 
-        const { page, limit } = req.params;
+        const { page, limit } = req.query;
 
-        if (typeof page !== 'number' || typeof limit !== 'number' || page < 1 || limit < 1 || limit > 10) {
+        const page_number = parseInt(page as string);
+
+        const  limit_number = parseInt(limit as string);
+
+        if (typeof page_number !== 'number' || typeof limit_number !== 'number' || page_number < 0 || limit_number < 1 || limit_number > 10) {
             return res.status(400).json({ message: 'Bad request.' });
         };
 
@@ -30,7 +34,7 @@ export default function (router: Router) {
             const db = await dbInstance.getDb();
             const petCollection = db.collection('pets');
 
-            const pets = await petCollection.find({ tele_id: tele_user.tele_id }).skip(page).limit(limit).toArray();
+            const pets = await petCollection.find({ tele_id: tele_user.tele_id }).skip(page_number).limit(limit_number).project({ accumulate_total_cost: 0, tele_id: 0 }).toArray();
 
             return res.status(200).json(pets);
         } catch (error) {

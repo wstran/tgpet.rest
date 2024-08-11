@@ -17,13 +17,15 @@ export default function (router: Router) {
         const config_onetime_quests = CONFIG.GET('game_onetime_quests');
 
         if (typeof quest_id !== 'string' || typeof action !== 'string' || !config_onetime_quests.quests[quest_id]?.[action]) {
-            return res.status(400).json({ message: 'Bad Request' });
+            res.status(400).json({ message: 'Bad request. Invalid quest ID or action.' });
+            return;
         };
 
         const { tele_user } = req as RequestWithUser;
 
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
-            return res.status(429).json({ message: 'Too many requests.' });
+            res.status(429).json({ message: 'Too many requests.' });
+            return;
         };
 
         const dbInstance = Database.getInstance();
@@ -32,57 +34,71 @@ export default function (router: Router) {
         const userCollection = db.collection('users');
         const logCollection = db.collection('logs');
 
-        const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
+        const session = client.startSession({
+            defaultTransactionOptions: {
+                readConcern: { level: 'local' },
+                writeConcern: { w: 1 },
+                retryWrites: false
+            }
+        });
 
         try {
-            session.startTransaction();
-
-            const user = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, [`quests.${quest_id}`]: 1 }, session }) as { quests?: Record<string, OneTimeType | undefined> } | null;
-
-            if (user === null) {
-                return res.status(404).json({ message: 'Not found.' });
-            };
-
-            user.quests = user.quests || {};
-
-            const quest = user.quests[quest_id];
-
-            if (quest?.[action]) {
-                return res.status(404).json({ message: 'Not found.' });
-            };
-
-            const now_date = new Date();
-
-            const is_done = quest && Object.keys(config_onetime_quests.quests[quest_id]).findIndex((i) => ((!i.startsWith('_') && i !== action) ? !quest[i] : false)) === -1;
-
-            const [update_user_result, insert_log_result] = await Promise.all([
-                userCollection.updateOne(
+            await session.withTransaction(async () => {
+                const user = await userCollection.findOne(
                     { tele_id: tele_user.tele_id },
-                    {
-                        $set: {
-                            [`quests.${quest_id}.${action}.created_at`]: now_date,
-                            ...(is_done && {
-                                [`quests.${quest_id}._doned`]: 'pending_confirmation'
-                            })
-                        }
-                    }, { session }),
-                logCollection.insertOne({ log_type: 'quest/set', tele_id: tele_user.tele_id, quest_id, action, created_at: now_date }, { session })
-            ]);
+                    { projection: { [`quests.${quest_id}`]: 1 }, session }
+                ) as { quests?: Record<string, OneTimeType | undefined> } | null;
 
-            if (update_user_result.acknowledged === true &&
-                update_user_result.modifiedCount > 0 &&
-                insert_log_result.acknowledged === true) {
-                await session.commitTransaction();
+                if (!user) {
+                    res.status(404).json({ message: 'User not found.' });
+                    throw new Error('Transaction aborted: User not found.');
+                };
 
-                return res.status(200).json({ created_at: now_date, is_done });
-            };
+                user.quests = user.quests || {};
+                const quest = user.quests[quest_id];
+
+                if (quest?.[action]) {
+                    res.status(400).json({ message: 'Action already completed.' });
+                    throw new Error('Transaction aborted: Action already completed.');
+                };
+
+                const now_date = new Date();
+
+                const is_done = quest && Object.keys(config_onetime_quests.quests[quest_id])
+                    .findIndex((i) => ((!i.startsWith('_') && i !== action) ? !quest[i] : false)) === -1;
+
+                const [update_user_result, insert_log_result] = await Promise.all([
+                    userCollection.updateOne(
+                        { tele_id: tele_user.tele_id },
+                        {
+                            $set: {
+                                [`quests.${quest_id}.${action}.created_at`]: now_date,
+                                ...(is_done && {
+                                    [`quests.${quest_id}._doned`]: 'pending_confirmation'
+                                })
+                            }
+                        }, { session }),
+                    logCollection.insertOne(
+                        { log_type: 'quest/set', tele_id: tele_user.tele_id, quest_id, action, created_at: now_date },
+                        { session }
+                    )
+                ]);
+
+                if (update_user_result.modifiedCount > 0 && insert_log_result.acknowledged === true) {
+                    res.status(200).json({ created_at: now_date, is_done });
+                } else {
+                    res.status(500).json({ message: 'Transaction failed to commit.' });
+                    throw new Error('Transaction failed to commit.');
+                };
+            });
         } catch (error) {
-            await session.abortTransaction();
+            console.error(error);
+            if (!res.headersSent) {
+                res.status(500).json({ message: 'Internal server error.' });
+            };
         } finally {
             await session.endSession();
             await redisWrapper.delete(REDIS_KEY, tele_user.tele_id);
         };
-
-        return res.status(500).json({ message: 'Internal server error.' });
     });
 }

@@ -24,7 +24,7 @@ export default function (router: Router) {
         const todoCollection = db.collection('todos');
         const logCollection = db.collection('logs');
 
-        const session = client.startSession({ causalConsistency: true, defaultTransactionOptions: { retryWrites: true } });
+        const session = client.startSession({ defaultTransactionOptions: { readConcern: { level: 'local' }, writeConcern: { w: 1 }, retryWrites: false } });
 
         try {
             session.startTransaction();

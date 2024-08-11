@@ -6,7 +6,7 @@ const REDIS_KEY = 'TPET_API';
 
 export default function (router: Router) {
     router.get('/self/referral', Middleware, async (req, res) => {
-        const { page, limit } = req.params;
+        const { page, limit } = req.query;
 
         if (typeof page !== 'number' || typeof limit !== 'number' || page < 1 || limit < 1 || limit > 10) {
             return res.status(400).json({ message: 'Bad request.' });
