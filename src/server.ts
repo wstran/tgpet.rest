@@ -30,7 +30,7 @@ const limiter = RateLimit({
     sendCommand: (...args: string[]) => redisClient.call(...args),
   }),
   windowMs: 1000,
-  max: 5,
+  max: 10,
   statusCode: 429,
   message: 'Too many requests.',
   standardHeaders: false,
