@@ -70,7 +70,7 @@ export default function (router: Router) {
 
                 const max_mana = date_timestamp + (config_pets[pet.type].max_mana * 28800000);
 
-                const new_mana = mana_timestamp + (config_game_items.items[item_name].mana * 28800000);
+                const new_mana = (date_timestamp > mana_timestamp ? date_timestamp : mana_timestamp) + (config_game_items.items[item_name].mana * 28800000);
 
                 const mana = new Date(new_mana > max_mana ? max_mana : new_mana);
 

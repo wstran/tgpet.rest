@@ -104,11 +104,11 @@ export default function (router: Router) {
 
                     $PET_UPDATE = { $unset: { farm_at: 1 }, $inc: { level: 1, balance: total_points, accumulate_total_cost: upgrade_cost } };
                     $LOG_INSERT = { ...$LOG_INSERT, tgp_balance, tgpet_balance, total_balance, farm_points, boost_points, total_points };
-                    $RESPONSE = { ...$RESPONSE, total_points, unset_farm_at: true };
+                    $RESPONSE = { ...$RESPONSE, total_points, accumulate_total_cost: upgrade_cost, unset_farm_at: true };
                 } else {
                     $PET_UPDATE = { $unset: { farm_at: 1 }, $inc: { level: 1, accumulate_total_cost: upgrade_cost } };
                     $LOG_INSERT = { ...$LOG_INSERT, tgp_balance, tgpet_balance, total_balance };
-                    $RESPONSE = { ...$RESPONSE, tgp_balance, tgpet_balance, unset_farm_at: true };
+                    $RESPONSE = { ...$RESPONSE, tgp_balance, tgpet_balance, accumulate_total_cost: upgrade_cost, unset_farm_at: true };
                 };
 
                 $RESPONSE = { ...$RESPONSE, level: pet.level + 1 };

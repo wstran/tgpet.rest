@@ -54,6 +54,7 @@ export default function (router: Router) {
                     let total_points = farm_points;
 
                     const boost_points = caculateFarmBoost(now_date.getTime(), pets, user.boosts || []);
+
                     total_points += boost_points;
 
                     const [update_user_result, update_pet_result, update_todo_result, insert_log_result] = await Promise.all([

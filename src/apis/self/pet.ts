@@ -34,7 +34,7 @@ export default function (router: Router) {
             const db = await dbInstance.getDb();
             const petCollection = db.collection('pets');
 
-            const pets = await petCollection.find({ tele_id: tele_user.tele_id }).skip(page_number).limit(limit_number).project({ accumulate_total_cost: 0, tele_id: 0 }).toArray();
+            const pets = await petCollection.find({ tele_id: tele_user.tele_id }).skip(page_number).limit(limit_number).project({ tele_id: 0 }).toArray();
 
             return res.status(200).json(pets);
         } catch (error) {

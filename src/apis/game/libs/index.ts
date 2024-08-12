@@ -9,7 +9,6 @@ export interface Pet {
     tele_id: string,
     farm_at?: Date,
     mana: Date,
-    max_mana: number,
     balance?: number,
     accumulate_total_cost: number
 }

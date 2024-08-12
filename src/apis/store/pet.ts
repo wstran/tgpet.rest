@@ -10,14 +10,17 @@ const REDIS_KEY = 'TPET_API';
 
 export default function (router: Router) {
     router.post('/store/pet', Middleware, async (req, res) => {
-        const { pet_name, pet_level } = req.body;
+        const { pet_name, pet_level, token } = req.body;
 
-        const config_game_pets = CONFIG.GET('game_pets');
-        
-        const pet = config_game_pets.pets[pet_name];
+        const config_game_pets = CONFIG.GET('store');
 
-        if (typeof pet_name !== 'string' || typeof pet_level !== 'number' || pet_level < 1 || pet_level > 50) {
-            res.status(400).json({ message: 'Bad request. Invalid pet name or level.' });
+        const pet = config_game_pets.pets[pet_name]?.find((pet: { level: number }) => pet.level === pet_level);
+
+
+        console.log(pet_name, pet_level, token, pet);
+
+        if (typeof pet_name !== 'string' || typeof pet_level !== 'number' || pet_level < 0 || pet_level > 50 || !pet || (/* token !== 'tgp' &&  */token !== 'tgpet')) {
+            res.status(400).json({ message: 'Bad request.' });
             return;
         };
 
@@ -55,37 +58,20 @@ export default function (router: Router) {
                     throw new Error('Transaction aborted: User not found.');
                 };
 
-                const tgp_balance = user.balances?.tgp || 0;
-                const tgpet_balance = user.balances?.tgpet || 0;
-                const total_balance = tgp_balance + tgpet_balance;
-                const total_cost = CONFIG.GET('farm_data')[`cost_level_${pet_level}`];
+                const balance = user.balances?.[token] || 0;
+                const total_cost = pet.cost;
 
-                if (total_balance < total_cost) {
+                if (balance < total_cost) {
                     res.status(400).json({ message: 'Not enough money to purchase pet.', status: 'NOT_ENOUGH_MONEY' });
                     throw new Error('Transaction aborted: Not enough money.');
-                };
-
-                let $USER_FILTER, $USER_UPDATE, $LOG_INSERT, $RESPONSE;
-
-                if (tgp_balance >= total_cost) {
-                    $USER_FILTER = { 'balances.tgp': { $gte: total_cost } };
-                    $USER_UPDATE = { $inc: { 'balances.tgp': -total_cost, 'totals.tgp_spent': total_cost, 'totals.tgp_spent_pet': total_cost } };
-                    $LOG_INSERT = { tgp_cost: total_cost };
-                    $RESPONSE = { tgp_cost: total_cost };
-                } else {
-                    const tgpet_cost = total_cost - tgp_balance;
-                    $USER_FILTER = { 'balances.tgp': { $gte: tgp_balance }, 'balances.tgpet': { $gte: tgpet_cost } };
-                    $USER_UPDATE = { $inc: { 'balances.tgp': -tgp_balance, 'balances.tgpet': -tgpet_cost, 'totals.tgp_spent': tgp_balance, 'totals.tgp_spent_pet': tgp_balance, 'totals.tgpet_spent': tgpet_cost, 'totals.tgpet_spent_pet': tgpet_cost } };
-                    $LOG_INSERT = { tgp_cost: tgp_balance, tgpet_cost };
-                    $RESPONSE = { tgp_cost: tgp_balance, tgpet_cost };
                 };
 
                 const now_date = new Date();
 
                 const [update_user_result, insert_pet_result, insert_log_result] = await Promise.all([
                     userCollection.updateOne(
-                        { tele_id: tele_user.tele_id, ...$USER_FILTER },
-                        { ...$USER_UPDATE, $inc: { ...$USER_UPDATE.$inc, 'totals.spent': total_cost, 'totals.spent_pet': total_cost } },
+                        { tele_id: tele_user.tele_id, [`balances.${token}`]: { $gte: total_cost } },
+                        { $inc: { [`balances.${token}`]: -total_cost, 'totals.spent': total_cost, 'totals.spent_pet': total_cost, [`totals.${token}_spent`]: total_cost, [`totals.${token}_spent_pet`]: total_cost } },
                         { session }
                     ),
                     petCollection.insertOne(
@@ -93,13 +79,13 @@ export default function (router: Router) {
                         { session }
                     ),
                     logCollection.insertOne(
-                        { log_type: 'store/pet', tele_id: tele_user.tele_id, pet_name, total_cost, tgp_balance, tgpet_balance, total_balance, created_at: now_date, ...$LOG_INSERT },
+                        { log_type: 'store/pet', tele_id: tele_user.tele_id, pet_name, token, total_cost, created_at: now_date },
                         { session }
                     )
                 ]);
 
-                if (update_user_result.modifiedCount > 0 && insert_pet_result.acknowledged === true && insert_log_result.acknowledged === true) {
-                    res.status(200).json($RESPONSE);
+                if ((update_user_result.modifiedCount > 0 ||  total_cost === 0) && insert_pet_result.acknowledged === true && insert_log_result.acknowledged === true) {
+                    res.status(200).json({ [`${token}_cost`]: total_cost });
                 } else {
                     res.status(500).json({ message: 'Transaction failed to commit.' });
                     throw new Error('Transaction failed to commit.');
