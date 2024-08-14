@@ -42,7 +42,7 @@ export default function (router: Router) {
             await session.withTransaction(async () => {
                 const get_repay = await userCollection.findOne(
                     { tele_id: tele_user.tele_id },
-                    { projection: { is_repaying: 1, "balances.tgpet": 1, ton_mortgage_amount: 1, tgpet_borrowed_amount: 1 }, session }
+                    { projection: { is_repaying: 1, "balances.tgpet": 1, "wallet.address": 1, ton_mortgage_amount: 1, tgpet_borrowed_amount: 1 }, session }
                 );
 
                 if (!get_repay) {
@@ -53,6 +53,11 @@ export default function (router: Router) {
                 if (get_repay.is_repaying) {
                     res.status(400).json({ message: 'You are already repaying.' });
                     throw new Error('Transaction aborted: User is already repaying.');
+                };
+
+                if (!get_repay.wallet?.address) {
+                    res.status(400).json({ message: 'You do not have a wallet address.' });
+                    throw new Error('Transaction aborted: User does not have a wallet address.');
                 };
 
                 if (get_repay.balances.tgpet < amount) {
@@ -78,6 +83,7 @@ export default function (router: Router) {
                                 todo_type: 'onchain/repay',
                                 tele_id: tele_user.tele_id,
                                 status: 'pending',
+                                address: get_repay.wallet?.address,
                                 amount: amount,
                                 repay_ton_amount,
                                 onchain_amount,
