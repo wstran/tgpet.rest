@@ -12,12 +12,11 @@ export default function (router: Router) {
     router.post('/store/pet', Middleware, async (req, res) => {
         const { pet_name, pet_level, token } = req.body;
 
-        const config_game_pets = CONFIG.GET('store');
+        const config_store = CONFIG.GET('store');
 
-        const pet = config_game_pets.pets[pet_name]?.find((pet: { level: number }) => pet.level === pet_level);
+        const config_game_pets = CONFIG.GET('game_pets');
 
-
-        console.log(pet_name, pet_level, token, pet);
+        const pet = { ...config_store.pets[pet_name]?.find((pet: { level: number }) => pet.level === pet_level), ...config_game_pets.pets[pet_name] };
 
         if (typeof pet_name !== 'string' || typeof pet_level !== 'number' || pet_level < 0 || pet_level > 50 || !pet || (/* token !== 'tgp' &&  */token !== 'tgpet')) {
             res.status(400).json({ message: 'Bad request.' });
@@ -92,8 +91,8 @@ export default function (router: Router) {
                 };
             });
         } catch (error) {
-            console.error(error);
             if (!res.headersSent) {
+                console.error(error);
                 res.status(500).json({ message: 'Internal server error.' });
             };
         } finally {

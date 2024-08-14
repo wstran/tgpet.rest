@@ -114,10 +114,10 @@ export default function (router: Router) {
                 };
             });
         } catch (error) {
-            console.error(error);
             if (!res.headersSent) {
+                console.error(error);
                 res.status(500).json({ message: 'Internal server error.' });
-            }
+            };
         } finally {
             await session.endSession();
             await redisWrapper.delete(REDIS_KEY, tele_user.tele_id);

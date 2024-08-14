@@ -62,6 +62,11 @@ export default function (router: Router) {
                     throw new Error('Transaction aborted: Pet is already farming.');
                 };
 
+                if (pet.level < 7) {
+                    res.status(400).json({ message: 'Pet level is too low.', status: 'PET_LEVEL_TOO_LOW' });
+                    throw new Error('Transaction aborted: Pet level is too low.');
+                };
+
                 const [pet_update_result, insert_log_result] = await Promise.all([
                     petCollection.updateOne({ _id: pet_object_id }, { $set: { farm_at: now_date } }, { session }),
                     logCollection.insertOne({ log_type: 'game/farm', tele_id: tele_user.tele_id, pet_object_id, created_at: now_date }, { session })
@@ -78,8 +83,8 @@ export default function (router: Router) {
                 };
             });
         } catch (error) {
-            console.error(error);
             if (!res.headersSent) {
+                console.error(error);
                 res.status(500).json({ message: 'Internal server error.' });
             };
         } finally {
