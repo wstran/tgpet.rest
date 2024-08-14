@@ -2,8 +2,6 @@ import { Router } from 'express';
 import Middleware, { RequestWithUser } from '../../middlewares/webapp-telegram';
 import Database from '../../libs/database';
 
-const REDIS_KEY = 'TPET_API';
-
 export default function (router: Router) {
     router.get('/self/referral', Middleware, async (req, res) => {
         const { page, limit } = req.query;
@@ -25,7 +23,7 @@ export default function (router: Router) {
                 return res.status(404).json({ message: 'Not found.' });
             };
 
-            const user_refs = await userCollection.find({ referral_code: user.invite_code }).project({ _id: 0, name: 1, username: 1 }).skip(page).limit(limit).toArray();
+            const user_refs = await userCollection.find({ referral_code: user.invite_code }).project({ _id: 0, name: 1, username: 1, 'totals.referral_points': 1, created_at: 1 }).skip(page).limit(limit).toArray();
 
             return res.status(200).json(user_refs);
         } catch {
