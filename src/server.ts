@@ -11,7 +11,6 @@ import './config';
 if (
   !process.env.PORT_BE ||
   !process.env.REDIS_URL ||
-  !process.env.WEBHOOK_URL ||
   !process.env.CLIENT_URL ||
   !process.env.BOT_TOKEN ||
   !process.env.SESSION_SECRET
