@@ -26,13 +26,22 @@ class watchCollection {
 
         this.config_map = new Map(this.config.map(i => [i.config_type, i]));
 
-        changeStream.on('change', async () => {
-            this.config = await collection.find().project({ _id: 0 }).toArray() as Config[];
+        changeStream.on('change', async (change) => {
+            if (change.operationType === 'update') {
 
-            this.config_map = new Map(this.config.map(i => [i.config_type, i]));
+                if (change.updateDescription?.updatedFields) {
+                    this.config = this.config.map(i => ({ ...i, ...change.updateDescription.updatedFields }));
+
+                    this.config_map = new Map(this.config.map(i => [i.config_type, { ...i, ...change.updateDescription.updatedFields }]));
+                };
+            } else {
+                this.config = await collection.find().project({ _id: 0 }).toArray() as Config[];
+
+                this.config_map = new Map(this.config.map(i => [i.config_type, i]));
+            };
         });
 
-        changeStream.on('end', this.watch);
+        changeStream.on('end', () => this.watch);
     };
 
     GET(config_type: string) {

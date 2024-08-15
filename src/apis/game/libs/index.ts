@@ -26,6 +26,9 @@ export const caculateFarmBoost = (
         const { farm_at, mana, accumulate_total_cost } = pets[i];
 
         const farm_timestamp = farm_at?.getTime();
+
+        if (!farm_timestamp) continue;
+
         const mana_timestamp = mana.getTime();
 
         if (!!farm_timestamp) {
@@ -62,6 +65,9 @@ export const caculateFarmAmount = (pets: Pet[], now_date: Date): [number, AnyBul
         const farm_speed = (accumulate_total_cost - config.x_average_TGP) / config.y_day_to_break_even;
 
         const farm_timestamp = farm_at?.getTime();
+
+        if (!farm_timestamp) continue;
+
         const mana_timestamp = mana.getTime();
         const farm_balance = (balance || 0);
 

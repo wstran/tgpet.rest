@@ -3,16 +3,20 @@ import Middleware, { RequestWithUser } from '../../middlewares/webapp-telegram';
 import Database from '../../libs/database';
 import { RedisWrapper } from '../../libs/redis-wrapper';
 import { generateRandomNumber } from '../../libs/custom';
+import { Address } from '@ton/core';
 
 const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 const REDIS_KEY = 'TPET_API';
 
 export default function (router: Router) {
     router.post('/onchain/borrow', Middleware, async (req, res) => {
-        const { amount } = req.body;
-
+        const { amount, address } = req.body;
+        
         if (
-            typeof amount !== 'number' || isNaN(amount) || amount <= 0 || amount > 5000000000
+            typeof amount !== 'number' ||
+            isNaN(amount) || amount <= 0 ||
+            amount > 5000000000 ||
+            Address.isFriendly(address) === false
         ) {
             res.status(400).json({ message: 'Bad request.' });
             return;
@@ -44,7 +48,7 @@ export default function (router: Router) {
                 const get_borrow = await userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { is_borrowing: 1 }, session });
 
                 if (get_borrow?.is_borrowing) {
-                    res.status(400).json({ message: 'You are already borrowing.' });
+                    res.status(404).json({ message: 'You are already borrowing.' });
                     throw new Error('Transaction aborted: User is already borrowing.');
                 };
 
@@ -62,6 +66,7 @@ export default function (router: Router) {
                                 tele_id: tele_user.tele_id,
                                 invoice_id: invoice_id,
                                 status: 'pending',
+                                address: address,
                                 amount: amount,
                                 onchain_amount: onchain_amount,
                                 estimate_at,

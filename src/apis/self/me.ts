@@ -27,27 +27,31 @@ export default function (router: Router) {
             const db = await dbInstance.getDb();
             const userCollection = db.collection('users');
 
-            const { user_project, config_project }: { user_project: string, config_project: string } = req.query as any;
+            const { user_project, config_project, config_only }: { user_project: string, config_project: string, config_only: boolean } = req.query as any;
 
-            const user_projection = user_project && user_project.split(' ');
+            let user: User | null = null;
 
-            const user = await userCollection.findOne(
-                { tele_id: tele_user.tele_id },
-                {
-                    projection: {
-                        _id: 0,
-                        ...(
-                            user_project === '*' || user_projection.length === 0
-                                ?
-                                not_allows.reduce((prev, current) => ({ ...prev, [current]: 0 }), {})
-                                :
-                                (user_projection && user_projection.reduce((prev, current) => not_allows.includes(current) ? prev : ({ ...prev, [current]: 1 }), {}))
-                        )
-                    }
-                }) as User | null;
+            if (!config_only) {
+                const user_projection = user_project && user_project.split(' ');
 
-            if (user === null && process.env.NODE_ENV !== 'development') {
-                return res.status(403).json({ message: 'Invalid user data.' });
+                user = await userCollection.findOne(
+                    { tele_id: tele_user.tele_id },
+                    {
+                        projection: {
+                            _id: 0,
+                            ...(
+                                user_project === '*' || user_projection.length === 0
+                                    ?
+                                    not_allows.reduce((prev, current) => ({ ...prev, [current]: 0 }), {})
+                                    :
+                                    (user_projection && user_projection.reduce((prev, current) => not_allows.includes(current) ? prev : ({ ...prev, [current]: 1 }), {}))
+                            )
+                        }
+                    }) as User | null;
+
+                if (user === null && process.env.NODE_ENV !== 'development') {
+                    return res.status(403).json({ message: 'Invalid user data.' });
+                };
             };
 
             let config = (config_project === '*' ? CONFIG.config : config_project?.split(' ').map(i => CONFIG.GET(i))) as Config[];

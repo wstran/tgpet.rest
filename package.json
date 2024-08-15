@@ -14,6 +14,7 @@
   "license": "ISC",
   "dependencies": {
     "@telegram-auth/server": "^1.0.3",
+    "@ton/core": "^0.56.3",
     "axios": "^1.6.8",
     "cors": "^2.8.5",
     "cross-env": "^7.0.3",
