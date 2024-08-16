@@ -3,7 +3,7 @@ import Middleware, { RequestWithUser } from '../../middlewares/webapp-telegram';
 import Database from '../../libs/database';
 import { RedisWrapper } from '../../libs/redis-wrapper';
 import { generateRandomNumber } from '../../libs/custom';
-import { Address } from '@ton/core';
+import { Address, toNano } from '@ton/core';
 
 const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 const REDIS_KEY = 'TPET_API';
@@ -55,7 +55,7 @@ export default function (router: Router) {
                 const created_at = new Date();
                 const estimate_at = new Date(created_at.getTime() + (1000 * 60 * 5));
                 const invoice_id = 'B' + generateRandomNumber(16);
-                const onchain_amount = (amount * 1000000000).toString();
+                const onchain_amount = toNano(amount).toString();
 
                 const [add_todo_result, update_user_result] = await Promise.all([
                     todoCollection.updateOne(

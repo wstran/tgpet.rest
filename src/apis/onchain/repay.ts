@@ -2,11 +2,11 @@ import { Router } from 'express';
 import Middleware, { RequestWithUser } from '../../middlewares/webapp-telegram';
 import Database from '../../libs/database';
 import { RedisWrapper } from '../../libs/redis-wrapper';
-import { Address } from '@ton/core';
+import { Address, toNano } from '@ton/core';
 
 const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 const REDIS_KEY = 'TPET_API';
-
+console.log((0.001 / 0.1751))
 export default function (router: Router) {
     router.post('/onchain/repay', Middleware, async (req, res) => {
         const { amount, address } = req.body;
@@ -46,7 +46,7 @@ export default function (router: Router) {
             await session.withTransaction(async () => {
                 const get_repay = await userCollection.findOne(
                     { tele_id: tele_user.tele_id },
-                    { projection: { is_repaying: 1, "balances.tgpet": 1, "wallet.address": 1, ton_mortgage_amount: 1, tgpet_borrowed_amount: 1 }, session }
+                    { projection: { is_repaying: 1, "balances.tgpet": 1, ton_mortgage_amount: 1, tgpet_borrowed_amount: 1 }, session }
                 );
 
                 if (!get_repay) {
@@ -70,9 +70,10 @@ export default function (router: Router) {
                 };
 
                 const created_at = new Date();
+
                 const conversion_value = get_repay.ton_mortgage_amount / get_repay.tgpet_borrowed_amount;
-                const repay_ton_amount = amount / conversion_value;
-                const onchain_amount = repay_ton_amount.toFixed(9);
+                const repay_ton_amount = amount * conversion_value;
+                const onchain_amount = toNano(repay_ton_amount - 0.008).toString();
 
                 const [add_todo_result, update_user_result] = await Promise.all([
                     todoCollection.updateOne(
@@ -110,7 +111,7 @@ export default function (router: Router) {
                         { session }
                     ),
                 ]);
-                console.log({ add_todo_result, update_user_result });
+                console.log({ add_todo_result, update_user_result, amount, repay_ton_amount, get_repay, conversion_value });
                 if (add_todo_result.upsertedCount > 0 && update_user_result.modifiedCount > 0) {
                     res.status(200).json({ repay_ton_amount, created_at });
                 } else {
