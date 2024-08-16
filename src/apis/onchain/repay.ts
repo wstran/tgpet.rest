@@ -5,8 +5,9 @@ import { RedisWrapper } from '../../libs/redis-wrapper';
 import { Address, toNano } from '@ton/core';
 
 const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
+
 const REDIS_KEY = 'TPET_API';
-console.log((0.001 / 0.1751))
+
 export default function (router: Router) {
     router.post('/onchain/repay', Middleware, async (req, res) => {
         const { amount, address } = req.body;
@@ -111,7 +112,7 @@ export default function (router: Router) {
                         { session }
                     ),
                 ]);
-                console.log({ add_todo_result, update_user_result, amount, repay_ton_amount, get_repay, conversion_value });
+
                 if (add_todo_result.upsertedCount > 0 && update_user_result.modifiedCount > 0) {
                     res.status(200).json({ repay_ton_amount, created_at });
                 } else {
