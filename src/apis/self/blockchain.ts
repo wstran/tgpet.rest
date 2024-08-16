@@ -5,7 +5,7 @@ import Database from '../../libs/database';
 const allow_history_types = new Map([
     ['onchain/borrow', { _id: 0, amount: 1, tgpet_amount: 1, status: 1, created_at: 1 }],
     ['onchain/repay', { _id: 0, amount: 1, repay_ton_amount: 1, status: 1, created_at: 1 }],
-    ['onchain/convert', { _id: 0, amount: 1, status: 1, created_at: 1 }],
+    ['onchain/convert', { _id: 1, amount: 1, status: 1, convert_type: 1, created_at: 1 }],
 ]);
 
 export default function (router: Router) {
