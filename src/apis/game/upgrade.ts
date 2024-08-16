@@ -12,9 +12,9 @@ const REDIS_KEY = 'TPET_API';
 
 export default function (router: Router) {
     router.post('/game/upgrade', Middleware, async (req, res) => {
-        const { pet_id } = req.body;
+        const { pet_id, token } = req.body;
 
-        if (typeof pet_id !== 'string') {
+        if (typeof pet_id !== 'string' || (token !== 'tgp' && token !== 'tgpet')) {
             res.status(400).json({ message: 'Bad request.' });
             return;
         };
@@ -46,7 +46,7 @@ export default function (router: Router) {
                 const pet_object_id = new ObjectId(pet_id);
 
                 const [user, pet] = await Promise.all([
-                    userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { balances: 1, boosts: 1 }, session }),
+                    userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { [`balances.${token}`]: 1, boosts: 1 }, session }),
                     petCollection.findOne({ _id: pet_object_id }, { projection: { level: 1, mana: 1, farm_at: 1, accumulate_total_cost: 1 }, session }) as Promise<Pet>
                 ]);
 
@@ -67,30 +67,20 @@ export default function (router: Router) {
 
                 const config_farm_data = CONFIG.GET('farm_data');
 
-                const tgp_balance = user.balances?.tgp || 0;
-                const tgpet_balance = user.balances?.tgpet || 0;
-                const total_balance = tgp_balance + tgpet_balance;
-                const upgrade_cost = config_farm_data[`cost_level_${pet.level + 1}`];
+                const balance = user.balances?.[token] || 0;
+                const total_cost = config_farm_data[`cost_level_${pet.level + 1}`];
 
-                if (total_balance < upgrade_cost) {
+                if (balance < total_cost) {
                     res.status(404).json({ message: 'Not enough money to upgrade.', status: 'NOT_ENOUGH_MONEY' });
                     throw new Error('Transaction aborted: Not enough money to upgrade.');
                 };
 
                 let $USER_FILTER, $USER_UPDATE, $PET_UPDATE, $LOG_INSERT, $RESPONSE;
 
-                if (tgp_balance >= upgrade_cost) {
-                    $USER_FILTER = { 'balances.tgp': { $gte: upgrade_cost } };
-                    $USER_UPDATE = { $inc: { 'balances.tgp': -upgrade_cost, 'totals.tgp_spent': upgrade_cost, 'totals.tgp_spent_upgrade': upgrade_cost } };
-                    $LOG_INSERT = { tgp_cost: upgrade_cost };
-                    $RESPONSE = { tgp_cost: upgrade_cost };
-                } else {
-                    const tgpet_cost = upgrade_cost - tgp_balance;
-                    $USER_FILTER = { 'balances.tgp': { $gte: tgp_balance }, 'balances.tgpet': { $gte: tgpet_cost } };
-                    $USER_UPDATE = { $inc: { 'balances.tgp': -tgp_balance, 'balances.tgpet': -tgpet_cost, 'totals.tgp_spent': tgp_balance, 'totals.tgp_spent_upgrade': tgp_balance, 'totals.tgpet_spent': tgpet_cost, 'totals.tgpet_spent_upgrade': tgpet_cost } };
-                    $LOG_INSERT = { tgp_cost: tgp_balance, tgpet_cost };
-                    $RESPONSE = { tgp_cost: tgp_balance, tgpet_cost };
-                };
+                $USER_FILTER = { [`balances.${token}`]: { $gte: total_cost } };
+                $USER_UPDATE = { $inc: { [`balances.${token}`]: -total_cost, [`totals.${token}_spent`]: total_cost, [`totals.${token}_spent_upgrade`]: total_cost } };
+                $LOG_INSERT = { [`${token}_cost`]: total_cost };
+                $RESPONSE = { [`${token}_cost`]: total_cost };
 
                 const date_timestamp = Date.now();
                 const mana_timestamp = pet.mana.getTime();
@@ -102,13 +92,13 @@ export default function (router: Router) {
                     const boost_points = caculateFarmBoost(date_timestamp, [pet], user.boosts || []);
                     const total_points = farm_points + boost_points;
 
-                    $PET_UPDATE = { $unset: { farm_at: 1 }, $inc: { level: 1, balance: total_points, accumulate_total_cost: upgrade_cost } };
-                    $LOG_INSERT = { ...$LOG_INSERT, tgp_balance, tgpet_balance, total_balance, farm_points, boost_points, total_points };
-                    $RESPONSE = { ...$RESPONSE, total_points, accumulate_total_cost: upgrade_cost, unset_farm_at: true };
+                    $PET_UPDATE = { $unset: { farm_at: 1 }, $inc: { level: 1, balance: total_points, accumulate_total_cost: total_cost } };
+                    $LOG_INSERT = { ...$LOG_INSERT, total_balance: balance, token, farm_points, boost_points, total_points };
+                    $RESPONSE = { ...$RESPONSE, total_points, accumulate_total_cost: total_cost, unset_farm_at: true };
                 } else {
-                    $PET_UPDATE = { $unset: { farm_at: 1 }, $inc: { level: 1, accumulate_total_cost: upgrade_cost } };
-                    $LOG_INSERT = { ...$LOG_INSERT, tgp_balance, tgpet_balance, total_balance };
-                    $RESPONSE = { ...$RESPONSE, tgp_balance, tgpet_balance, accumulate_total_cost: upgrade_cost, unset_farm_at: true };
+                    $PET_UPDATE = { $unset: { farm_at: 1 }, $inc: { level: 1, accumulate_total_cost: total_cost } };
+                    $LOG_INSERT = { ...$LOG_INSERT, total_balance: balance, token };
+                    $RESPONSE = { ...$RESPONSE, total_balance: balance, token, accumulate_total_cost: total_cost, unset_farm_at: true };
                 };
 
                 $RESPONSE = { ...$RESPONSE, level: pet.level + 1 };
@@ -116,7 +106,7 @@ export default function (router: Router) {
                 const [update_user_result, update_pet_result, insert_log_result] = await Promise.all([
                     userCollection.updateOne({ tele_id: tele_user.tele_id, ...$USER_FILTER }, $USER_UPDATE, { session }),
                     petCollection.updateOne({ _id: pet._id }, $PET_UPDATE, { session }),
-                    logCollection.insertOne({ log_type: 'game/upgrade', tele_id: tele_user.tele_id, from_level: pet.level, to_level: pet.level + 1, upgrade_cost, pet_before: pet, created_at: new Date(date_timestamp), ...$LOG_INSERT }, { session })
+                    logCollection.insertOne({ log_type: 'game/upgrade', tele_id: tele_user.tele_id, from_level: pet.level, to_level: pet.level + 1, total_cost, pet_before: pet, created_at: new Date(date_timestamp), ...$LOG_INSERT }, { session })
                 ]);
 
                 if (

@@ -46,7 +46,7 @@ export default function (router: Router) {
             await session.withTransaction(async () => {
                 const user = await userCollection.findOne(
                     { tele_id: tele_user.tele_id },
-                    { projection: { balances: 1 }, session }
+                    { projection: { [`balances.${token}`]: 1 }, session }
                 );
 
                 if (!user) {
