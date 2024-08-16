@@ -6,6 +6,7 @@ import { generateRandomNumber } from '../../libs/custom';
 import { Address, toNano } from '@ton/core';
 
 const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
+
 const REDIS_KEY = 'TPET_API';
 
 export default function (router: Router) {
