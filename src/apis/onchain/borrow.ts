@@ -14,7 +14,7 @@ export default function (router: Router) {
         
         if (
             typeof amount !== 'number' ||
-            isNaN(amount) || amount <= 0 ||
+            isNaN(amount) || /* amount < 0.5 || */
             amount > 5000000000 ||
             Address.isFriendly(address) === false
         ) {
