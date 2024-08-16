@@ -26,18 +26,18 @@ export default function (router: Router) {
         const todoCollection = db.collection('todos');
         const logCollection = db.collection('logs');
 
-        const session = client.startSession({ 
-            defaultTransactionOptions: { 
-                readConcern: { level: 'local' }, 
-                writeConcern: { w: 1 }, 
-                retryWrites: false 
-            } 
+        const session = client.startSession({
+            defaultTransactionOptions: {
+                readConcern: { level: 'local' },
+                writeConcern: { w: 1 },
+                retryWrites: false
+            }
         });
 
         try {
             await session.withTransaction(async () => {
                 const [user, pets] = await Promise.all([
-                    userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, referral_code: 1, boosts: 1 }, session }),
+                    userCollection.findOne({ tele_id: tele_user.tele_id }, { projection: { _id: 0, referral_code: 1, boosts: 1, last_claimed: 1 }, session }),
                     petCollection.find({ tele_id: tele_user.tele_id }, { session }).project({ _id: 1, type: 1, farm_at: 1, mana: 1, balance: 1, accumulate_total_cost: 1 }).toArray()
                 ]) as [WithId<Document> | null, Pet[]];
 
@@ -47,6 +47,11 @@ export default function (router: Router) {
                 };
 
                 const now_date = new Date();
+
+                if (user.last_claimed && now_date.getTime() - user.last_claimed.getTime() < 600000) {
+                    res.status(400).json({ message: 'Claim too soon.' });
+                    throw new Error('Transaction aborted: Claim too soon.');
+                };
 
                 const [farm_points, bulkOps] = caculateFarmAmount(pets, now_date);
 
@@ -58,7 +63,7 @@ export default function (router: Router) {
                     total_points += boost_points;
 
                     const [update_user_result, update_pet_result, update_todo_result, insert_log_result] = await Promise.all([
-                        userCollection.updateOne({ tele_id: tele_user.tele_id }, { $inc: { 'balances.tgp': total_points, 'totals.game_claim_tgp': total_points } }, { session }),
+                        userCollection.updateOne({ tele_id: tele_user.tele_id }, { $set: { last_claimed: now_date }, $inc: { 'balances.tgp': total_points, 'totals.game_claim_tgp': total_points } }, { session }),
                         petCollection.bulkWrite(bulkOps, { session }),
                         user.referral_code ? todoCollection.insertOne({ todo_type: 'game/claim/referral', status: "pending", tele_id: tele_user.tele_id, referral_code: user.referral_code, farm_points, created_at: now_date }, { session }) : Promise.resolve({ acknowledged: true }),
                         logCollection.insertOne({ log_type: 'game/claim', tele_id: tele_user.tele_id, farm_points, boost_points, total_points, created_at: now_date, pets_before: pets, bulkOps }, { session })
@@ -71,7 +76,7 @@ export default function (router: Router) {
                         update_todo_result.acknowledged === true &&
                         insert_log_result.acknowledged === true
                     ) {
-                        res.status(200).json({ total_points });
+                        res.status(200).json({ total_points, created_at: now_date });
                     } else {
                         res.status(500).json({ message: 'Transaction failed to commit.' });
                         throw new Error('Transaction failed to commit.');
