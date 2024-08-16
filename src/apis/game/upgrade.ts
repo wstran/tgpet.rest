@@ -61,7 +61,7 @@ export default function (router: Router) {
                 };
 
                 if (pet.level === 50) {
-                    res.status(400).json({ message: 'Pet has reached max level.', status: 'PET_MAX_LEVEL' });
+                    res.status(404).json({ message: 'Pet has reached max level.', status: 'PET_MAX_LEVEL' });
                     throw new Error('Transaction aborted: Pet has reached max level.');
                 };
 
@@ -73,7 +73,7 @@ export default function (router: Router) {
                 const upgrade_cost = config_farm_data[`cost_level_${pet.level + 1}`];
 
                 if (total_balance < upgrade_cost) {
-                    res.status(400).json({ message: 'Not enough money to upgrade.', status: 'NOT_ENOUGH_MONEY' });
+                    res.status(404).json({ message: 'Not enough money to upgrade.', status: 'NOT_ENOUGH_MONEY' });
                     throw new Error('Transaction aborted: Not enough money to upgrade.');
                 };
 
