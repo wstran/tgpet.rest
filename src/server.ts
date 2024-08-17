@@ -36,6 +36,8 @@ const limiter = RateLimit({
   legacyHeaders: false,
 });
 
+app.set('trust proxy', 1);
+
 app.use(limiter);
 
 app.use(express.json());
