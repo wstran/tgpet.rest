@@ -42,7 +42,7 @@ export default function (router: Router) {
             await session.withTransaction(async () => {
                 const pet_object_id = new ObjectId(pet_id);
 
-                const pet = await petCollection.findOne({ _id: pet_object_id }, { projection: { farm_at: 1, mana: 1 }, session });
+                const pet = await petCollection.findOne({ _id: pet_object_id }, { projection: { mana: 1, farm_at: 1, level: 1 }, session });
 
                 if (!pet) {
                     res.status(404).json({ message: 'Pet not found.', status: 'PET_NOT_FOUND' });

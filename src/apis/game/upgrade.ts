@@ -71,7 +71,7 @@ export default function (router: Router) {
                 const total_cost = config_farm_data[`cost_level_${pet.level + 1}`];
 
                 if (balance < total_cost) {
-                    res.status(404).json({ message: 'Not enough money to upgrade.', status: 'NOT_ENOUGH_MONEY' });
+                    res.status(404).json({ message: `Not enough ${token.toUpperCase()} to upgrade.`, status: 'NOT_ENOUGH_MONEY' });
                     throw new Error('Transaction aborted: Not enough money to upgrade.');
                 };
 
