@@ -69,11 +69,19 @@ export default function (router: Router) {
 
                 const $inc: Record<string, number> = {};
 
+                const $RESPONSE: { [key: string]: any } = { created_at: now_date };
+
                 for (const name in config_quest) {
                     if (config_quest[name].type === 'food') {
                         $inc[`inventorys.${name}`] = config_quest[name].amount;
+                        $RESPONSE[config_quest[name].type] = {
+                            [name]: config_quest[name].amount
+                        };
                     } else if (config_quest[name].type === 'token') {
                         $inc[`balances.${name}`] = config_quest[name].amount;
+                        $RESPONSE[config_quest[name].type] = {
+                            [name]: config_quest[name].amount
+                        };
                     };
                 };
 
@@ -90,7 +98,7 @@ export default function (router: Router) {
                 ]);
 
                 if (update_user_result.modifiedCount > 0 && insert_log_result.acknowledged === true) {
-                    res.status(200).json({ created_at: now_date });
+                    res.status(200).json($RESPONSE);
                 } else {
                     res.status(500).json({ message: 'Transaction failed to commit.' });
                     throw new Error('Transaction failed to commit.');
