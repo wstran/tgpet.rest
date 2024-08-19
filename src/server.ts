@@ -9,11 +9,13 @@ import Redis from 'ioredis';
 import './config';
 
 if (
+  !process.env.MONGO_URI ||
+  !process.env.DB_NAME ||
   !process.env.PORT_BE ||
-  !process.env.REDIS_URL ||
   !process.env.CLIENT_URL ||
-  !process.env.BOT_TOKEN ||
-  !process.env.SESSION_SECRET
+  !process.env.REDIS_URL ||
+  !process.env.SESSION_SECRET ||
+  !process.env.SECRET_KEY
 ) {
   throw Error('No environment variable found!');
 }
