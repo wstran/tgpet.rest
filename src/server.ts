@@ -44,7 +44,7 @@ app.use(express.json());
 
 app.use(
   cors({
-    origin: [process.env.CLIENT_URL, 'http://localhost:3000'],
+    origin: [process.env.NODE_ENV === 'production' ? process.env.CLIENT_URL : 'http://localhost:3000'],
     credentials: true,
   })
 );
@@ -88,15 +88,12 @@ app.listen(port, () => {
 
   // indexes of config
   await configCollection.createIndex({ config_type: 1 });
-  await configCollection.createIndex({ quest_id: 1 }, { unique: true, sparse: true });
 
   // indexes of users
   await userCollection.createIndex({ tele_id: 1 }, { unique: true });
   await userCollection.createIndex({ invite_code: 1 }, { unique: true });
   await userCollection.createIndex({ referral_code: 1 }, { sparse: true });
   await userCollection.createIndex({ username: 1 }, { sparse: true });
-  await userCollection.createIndex({ 'user_refs.tele_id': 1 }, { unique: true, sparse: true });
-  await userCollection.createIndex({ 'user_refs.verified': 1 }, { sparse: true });
   await userCollection.createIndex({ 'wallet.address': 1 }, { unique: true, sparse: true });
 
   // indexes of pets
