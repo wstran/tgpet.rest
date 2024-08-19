@@ -9,7 +9,8 @@ const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.
 const REDIS_KEY = 'TPET_API';
 
 export default function (router: Router) {
-    router.post('/onchain/convert', Middleware, async (req, res) => {
+    // Coming soon...
+    /* router.post('/onchain/convert', Middleware, async (req, res) => {
         const { amount, convert_type } = req.body;
 
         const convert_sets = CONFIG.GET('convert_sets');
@@ -104,5 +105,5 @@ export default function (router: Router) {
             await session.endSession();
             await redisWrapper.delete(REDIS_KEY, tele_user.tele_id);
         };
-    });
+    }); */
 }
