@@ -17,6 +17,7 @@ export default function (router: Router) {
         if (
             typeof amount !== 'number' || isNaN(amount) || amount < 0 || amount === Infinity ||
             typeof convert_type !== 'string' || !convert_sets[convert_type]
+            || convert_type !== 'tgp_to_tgpet' // is only 'tgp_to_tgpet'
         ) {
             res.status(400).json({ message: 'Bad request.' });
             return;
@@ -71,7 +72,7 @@ export default function (router: Router) {
                             convert_type,
                             amount,
                             created_at,
-                            ...(convert_type === 'tgpet_to_tgp' ? { status: 'completed', completed_at: created_at } : {})
+                            // ...(convert_type === 'tgpet_to_tgp' ? { status: 'completed', completed_at: created_at } : {})
                         },
                         { session }
                     ),
@@ -80,7 +81,7 @@ export default function (router: Router) {
                         {
                             $inc: {
                                 [`balances.${convert_sets[convert_type].from}`]: -amount,
-                                ...(convert_type === 'tgpet_to_tgp' ? { [`balances.${convert_sets[convert_type].to}`]: amount } : {})
+                                // ...(convert_type === 'tgpet_to_tgp' ? { [`balances.${convert_sets[convert_type].to}`]: amount } : {})
                             }
                         },
                         { session }
