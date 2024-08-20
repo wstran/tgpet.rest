@@ -79,7 +79,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
     const db = await dbInstance.getDb();
     const client = dbInstance.getClient();
     const userCollection = db.collection('users');
-    const todoCollection = db.collection('todos');
+    // const todoCollection = db.collection('todos');
 
     const session = client.startSession({ defaultTransactionOptions: { readConcern: { level: 'local' }, writeConcern: { w: 1 }, retryWrites: false } });
 
@@ -102,11 +102,15 @@ export default async function (req: Request, res: Response, next: NextFunction) 
                 insert.invite_code = generate_invite;
 
                 if (typeof referral_code === 'string') {
-                    const insert_todo_result = await todoCollection.insertOne({ todo_type: 'add/user/invite', status: "pending", tele_id, referral_code, created_at: now_date }, { session });
+                    const is_invite_code_valid = await userCollection.countDocuments({ invite_code: referral_code }) === 1;
+
+                    if (is_invite_code_valid) insert.referral_code = referral_code;
+                    // DEV
+                    /* const insert_todo_result = await todoCollection.insertOne({ todo_type: 'rest:add/user/invite', status: "pending", tele_id, referral_code, created_at: now_date }, { session });
         
                     if (insert_todo_result.acknowledged !== true) {
                         throw new Error('Insert todo failed.');
-                    };
+                    }; */
                 };
                 break;
             };

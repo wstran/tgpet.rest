@@ -60,10 +60,10 @@ export default function (router: Router) {
 
                 const [add_todo_result, update_user_result] = await Promise.all([
                     todoCollection.updateOne(
-                        { todo_type: 'onchain/borrow', tele_id: tele_user.tele_id, status: 'pending' },
+                        { todo_type: 'rest:onchain/borrow', tele_id: tele_user.tele_id, status: 'pending' },
                         {
                             $setOnInsert: {
-                                todo_type: 'onchain/borrow',
+                                todo_type: 'rest:onchain/borrow',
                                 tele_id: tele_user.tele_id,
                                 invoice_id: invoice_id,
                                 status: 'pending',

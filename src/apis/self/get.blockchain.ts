@@ -26,7 +26,7 @@ export default function (router: Router) {
             const todoCollection = db.collection("todos");
 
             const history_result = await todoCollection
-                .find({ todo_type: history_type, tele_id: tele_user.tele_id })
+                .find({ todo_type: 'rest:' + history_type, tele_id: tele_user.tele_id })
                 .project(get_history_project)
                 .sort({ created_at: -1 })
                 .toArray();

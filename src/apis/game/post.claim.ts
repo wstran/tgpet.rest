@@ -16,7 +16,7 @@ export default function (router: Router) {
         if (!await redisWrapper.add(REDIS_KEY, tele_user.tele_id, 15)) {
             res.status(429).json({ message: 'Too many requests.' });
             return
-        }
+        };
 
         const dbInstance = Database.getInstance();
         const db = await dbInstance.getDb();
@@ -65,7 +65,7 @@ export default function (router: Router) {
                     const [update_user_result, update_pet_result, update_todo_result, insert_log_result] = await Promise.all([
                         userCollection.updateOne({ tele_id: tele_user.tele_id }, { $set: { last_claimed: now_date }, $inc: { 'balances.tgp': total_points, 'totals.game_claim_tgp': total_points } }, { session }),
                         petCollection.bulkWrite(bulkOps, { session }),
-                        user.referral_code ? todoCollection.insertOne({ todo_type: 'game/claim/referral', status: "pending", tele_id: tele_user.tele_id, referral_code: user.referral_code, farm_points, created_at: now_date }, { session }) : Promise.resolve({ acknowledged: true }),
+                        user.referral_code ? todoCollection.insertOne({ todo_type: 'rest:game/claim/referral', status: "pending", tele_id: tele_user.tele_id, referral_code: user.referral_code, farm_points, created_at: now_date }, { session }) : Promise.resolve({ acknowledged: true }),
                         logCollection.insertOne({ log_type: 'game/claim', tele_id: tele_user.tele_id, farm_points, boost_points, total_points, created_at: now_date, pets_before: pets, bulkOps }, { session })
                     ]);
 
