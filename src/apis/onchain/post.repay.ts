@@ -3,6 +3,7 @@ import Middleware, { RequestWithUser } from '../../middlewares/webapp-telegram';
 import Database from '../../libs/database';
 import { RedisWrapper } from '../../libs/redis-wrapper';
 import { Address, toNano } from '@ton/core';
+import { CONFIG } from 'config';
 
 const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 
@@ -47,7 +48,7 @@ export default function (router: Router) {
             await session.withTransaction(async () => {
                 const get_repay = await userCollection.findOne(
                     { tele_id: tele_user.tele_id },
-                    { projection: { is_repaying: 1, "balances.tgpet": 1, ton_mortgage_amount: 1, tgpet_borrowed_amount: 1 }, session }
+                    { projection: { username: 1, is_repaying: 1, "balances.tgpet": 1, ton_mortgage_amount: 1, tgpet_borrowed_amount: 1 }, session }
                 );
 
                 if (!get_repay) {
@@ -76,23 +77,9 @@ export default function (router: Router) {
                 const repay_ton_amount = amount * conversion_value;
                 const onchain_amount = toNano(repay_ton_amount - 0.008).toString();
 
-                const [add_todo_result, update_user_result] = await Promise.all([
-                    todoCollection.updateOne(
-                        { todo_type: 'rest:onchain/repay', tele_id: tele_user.tele_id, status: 'pending' },
-                        {
-                            $setOnInsert: {
-                                todo_type: 'rest:onchain/repay',
-                                tele_id: tele_user.tele_id,
-                                status: 'pending',
-                                address: address,
-                                amount: amount,
-                                repay_ton_amount,
-                                onchain_amount,
-                                created_at,
-                            },
-                        },
-                        { upsert: true, session }
-                    ),
+                const repay_config = CONFIG.GET('repay_state');
+
+                const [update_user_result, add_todo_result, add_message_result] = await Promise.all([
                     userCollection.updateOne(
                         {
                             tele_id: tele_user.tele_id,
@@ -106,14 +93,61 @@ export default function (router: Router) {
                                 "balances.tgpet": -amount,
                                 ton_mortgage_amount: -repay_ton_amount,
                                 tgpet_borrowed_amount: -amount,
-                                "totals.tgpet_repayed_amount": amount,
+                                ...(repay_config.state !== 'approve' && { "totals.tgpet_repayed_amount": amount }),
                             },
                         },
                         { session }
                     ),
+                    todoCollection.updateOne(
+                        { todo_type: 'rest:onchain/repay', tele_id: tele_user.tele_id, status: 'pending' },
+                        {
+                            $setOnInsert: {
+                                todo_type: 'rest:onchain/repay',
+                                tele_id: tele_user.tele_id,
+                                status: repay_config.state === 'approve' ? 'approving' : 'pending',
+                                address: address,
+                                amount: amount,
+                                repay_ton_amount,
+                                onchain_amount,
+                                session_id: session.id,
+                                created_at,
+                            },
+                        },
+                        { upsert: true, session }
+                    ),
+
+                    repay_config === 'approve' && todoCollection.insertOne({
+                        todo_type: 'bot:send/tele/message',
+                        tele_id: tele_user.tele_id,
+                        status: "pending",
+                        is_admin: true,
+                        session_id: session.id,
+                        target_id: '-1002199986770',
+                        message: `
+                            A user has requested to repay their TGPET loan. Please approve or reject the request.
+
+                            Repay:
+
+                            <b>tele_id: </b> <code>${tele_user.tele_id}</code>
+                            <b>username: </b> @${get_repay.username || 'Unknown'}
+                            <b>tgpet_amount: </b> ${amount}
+                            <b>repay_ton_amount: </b> ${repay_ton_amount}
+                        `,
+                        bottons: [
+                            {
+                                "text": "Approve",
+                                "callback_data": "approve_repay_" + session.id
+                            },
+                            {
+                                "text": "Reject",
+                                "callback_data": "reject_repay_" + session.id
+                            }
+                        ],
+                        created_at,
+                    }),
                 ]);
 
-                if (add_todo_result.upsertedCount > 0 && update_user_result.modifiedCount > 0) {
+                if (add_todo_result.upsertedCount > 0 && update_user_result.modifiedCount > 0 && (!add_message_result || add_message_result.acknowledged === true)) {
                     res.status(200).json({ repay_ton_amount, created_at });
                 } else {
                     res.status(500).json({ message: 'Transaction failed to commit.' });
