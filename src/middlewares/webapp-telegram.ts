@@ -79,7 +79,6 @@ export default async function (req: Request, res: Response, next: NextFunction) 
     const db = await dbInstance.getDb();
     const client = dbInstance.getClient();
     const userCollection = db.collection('users');
-    // const todoCollection = db.collection('todos');
 
     const session = client.startSession({ defaultTransactionOptions: { readConcern: { level: 'local' }, writeConcern: { w: 1 }, retryWrites: false } });
 
