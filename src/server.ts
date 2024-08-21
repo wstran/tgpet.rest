@@ -67,14 +67,6 @@ app.use((_, res, next) => {
 
 app.use('/api', Apis);
 
-app.get('/tonconnect-manifest.json', (_, res) => {
-  res.json({
-    "url": "https://tgpet.app",
-    "name": "TGPET",
-    "iconUrl": "https://raw.githubusercontent.com/tgpet/tgp/main/logo.png"
-  });
-});
-
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
