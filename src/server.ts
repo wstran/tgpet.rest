@@ -96,7 +96,7 @@ app.listen(port, () => {
   await userCollection.createIndex({ invite_code: 1 }, { unique: true });
   await userCollection.createIndex({ referral_code: 1 }, { sparse: true });
   await userCollection.createIndex({ username: 1 }, { sparse: true });
-  await userCollection.createIndex({ 'wallet.address': 1 }, { unique: true, sparse: true });
+  await userCollection.createIndex({ 'wallet.address': 1 }, { sparse: true });
 
   // indexes of pets
   await petCollection.createIndex({ tele_id: 1, type: 1 });
