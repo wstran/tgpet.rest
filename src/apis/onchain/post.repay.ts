@@ -16,7 +16,7 @@ export default function (router: Router) {
         if (
             typeof amount !== 'number' ||
             isNaN(amount) || amount <= 0
-            || amount > 5000000000 ||
+            || amount === Infinity ||
             Address.isFriendly(address) === false
         ) {
             res.status(400).json({ message: 'Bad request.' });
