@@ -118,6 +118,7 @@ export default function (router: Router) {
 
                     repay_config.state === 'approve' && todoCollection.insertOne({
                         todo_type: 'bot:send/tele/message',
+                        message_type: 'rest:onchain/repay',
                         tele_id: tele_user.tele_id,
                         status: "pending",
                         is_admin: true,
