@@ -116,7 +116,7 @@ export default function (router: Router) {
                         { upsert: true, session }
                     ),
 
-                    repay_config === 'approve' && todoCollection.insertOne({
+                    repay_config.state === 'approve' && todoCollection.insertOne({
                         todo_type: 'bot:send/tele/message',
                         tele_id: tele_user.tele_id,
                         status: "pending",
