@@ -123,17 +123,8 @@ export default function (router: Router) {
                         is_admin: true,
                         session_id: session.id,
                         target_id: '-1002199986770',
-                        message: `
-                            A user has requested to repay their TGPET loan. Please approve or reject the request.
-
-                            Repay:
-
-                            <b>tele_id: </b> <code>${tele_user.tele_id}</code>
-                            <b>username: </b> @${get_repay.username || 'Unknown'}
-                            <b>tgpet_amount: </b> ${amount}
-                            <b>repay_ton_amount: </b> ${repay_ton_amount}
-                        `,
-                        bottons: [
+                        message: `A user has requested to repay their TGPET loan. Please approve or reject the request.\n\nRepay:\n**tele_id: ** \`\${tele_user.tele_id}\`\\n**username: ** @${get_repay.username || 'Unknown'}\n**tgpet_amount: ** ${amount}\n**repay_ton_amount: ** ${repay_ton_amount}`,
+                        buttons: [
                             {
                                 "text": "Approve",
                                 "callback_data": "approve_repay_" + session.id
