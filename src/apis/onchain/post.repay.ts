@@ -79,6 +79,8 @@ export default function (router: Router) {
 
                 const repay_config = CONFIG.GET('repay_state');
 
+                const session_id = session.id?.id.toString('hex');
+
                 const [update_user_result, add_todo_result, add_message_result] = await Promise.all([
                     userCollection.updateOne(
                         {
@@ -109,7 +111,7 @@ export default function (router: Router) {
                                 amount: amount,
                                 repay_ton_amount,
                                 onchain_amount,
-                                session_id: session.id,
+                                session_id,
                                 created_at,
                             },
                         },
@@ -122,17 +124,17 @@ export default function (router: Router) {
                         tele_id: tele_user.tele_id,
                         status: "pending",
                         is_admin: true,
-                        session_id: session.id,
+                        session_id,
                         target_id: '-1002199986770',
-                        message: `A user has requested to repay their TGPET loan. Please approve or reject the request.\n\nRepay:\n**tele_id: ** \`\${tele_user.tele_id}\`\\n**username: ** @${get_repay.username || 'Unknown'}\n**tgpet_amount: ** ${amount}\n**repay_ton_amount: ** ${repay_ton_amount}`,
+                        message: `A user has requested to repay their TGPET loan. Please approve or reject the request.\n\nRepay:\n**tele_id: ** ${tele_user.tele_id}\n**username: ** @${get_repay.username || 'Unknown'}\n**tgpet_amount: ** ${amount}\n**repay_ton_amount: ** ${repay_ton_amount}`,
                         buttons: [
                             {
                                 "text": "Approve",
-                                "callback_data": "approve_repay_" + session.id
+                                "callback_data": "approve_repay_" + session_id
                             },
                             {
                                 "text": "Reject",
-                                "callback_data": "reject_repay_" + session.id
+                                "callback_data": "reject_repay_" + session_id
                             }
                         ],
                         created_at,
