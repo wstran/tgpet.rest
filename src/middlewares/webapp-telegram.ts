@@ -58,13 +58,14 @@ export default async function (req: Request, res: Response, next: NextFunction) 
     if (req.method === 'GET' && req.query) {
         const params = new URLSearchParams(req.query as any).toString();
         dataToSign += `&params=${params}`;
+
+
+        console.log({ params, dataToSign });
     };
 
     if (req.method === 'POST' && req.body) {
         const data = JSON.stringify(req.body);
         dataToSign += `&data=${data}`;
-
-        console.log({ data, dataToSign });
     };
 
     const serverSignature = MD5(process.env.ROOT_SECRET + dataToSign).toString(enc.Hex);
@@ -90,7 +91,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
     const user_param = params.get('user');
 
     const auth_date = Number(params.get('auth_date')) * 1000;
-    console.log("typeof user_param !== 'string' || isNaN(auth_date)", (typeof user_param !== 'string' || isNaN(auth_date)));
+    
     if (typeof user_param !== 'string' || isNaN(auth_date)) {
         return res.status(400).json({ message: 'Bad request.' });
     };
