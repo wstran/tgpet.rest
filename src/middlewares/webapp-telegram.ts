@@ -122,6 +122,8 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     if (Array.isArray(ip)) ip = ip[0];
 
+    if (ip.includes(',')) ip = ip.split(', ')[0];
+
     const lookup = geoip.lookup(ip);
 
     console.log({ lookup }, ip, req.headers['x-forwarded-for'] || req.socket.remoteAddress);
