@@ -202,13 +202,13 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
             const update_location_result = await locationCollection.updateOne(
                 { 
-                    tele_id, 
-                    ip_address: ip, 
-                    ...(previous_ip !== ip && { upsert: session.id?.id.toString('hex') }) 
+                    tele_id,
+                    ip_address: ip,
+                    ...(previous_ip !== ip && { upsert: 1 })
                 },
                 {
                     $set: { ...formattedLocation, last_active: now_date },
-                    $setOnInsert: { tele_id, ...formattedLocation, created_at: now_date },
+                    $setOnInsert: { tele_id, created_at: now_date },
                 },
                 { upsert: true, session }
             );
