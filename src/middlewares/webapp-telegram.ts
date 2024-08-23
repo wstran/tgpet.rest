@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import CryptoJS, { enc, SHA256 } from 'crypto-js';
+import CryptoJS, { enc, MD5 } from 'crypto-js';
 import Database from '../libs/database';
 import { RedisWrapper } from '../libs/redis-wrapper';
 import { generateRandomUpperString } from '../libs/custom';
@@ -31,7 +31,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
         return next();
     };
 
-    const secretKey = CryptoJS.HmacSHA256(process.env.BOT_TOKEN as string, 'WebAppData');
+    const secretKey = CryptoJS.HmacMD5(process.env.BOT_TOKEN as string, 'WebAppData');
 
     const webapp_init = req.headers['--webapp-init'];
 
@@ -65,7 +65,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
         dataToSign += `&data=${data}`;
     };
 
-    const serverSignature = SHA256(process.env.ROOT_SECRET + dataToSign).toString(enc.Hex);
+    const serverSignature = MD5(process.env.ROOT_SECRET + dataToSign).toString(enc.Hex);
 
     if (serverSignature !== request_hash) {
         return res.status(400).json({ message: 'Bad request.' });
@@ -79,7 +79,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     const dataCheckString = Array.from(params.entries()).sort().map(e => `${e[0]}=${e[1]}`).join('\n');
 
-    const hmac = CryptoJS.HmacSHA256(dataCheckString, secretKey).toString(CryptoJS.enc.Hex);
+    const hmac = CryptoJS.HmacMD5(dataCheckString, secretKey).toString(CryptoJS.enc.Hex);
 
     if (hmac !== hash) {
         return res.status(403).json({ message: 'Invalid user data.' });
