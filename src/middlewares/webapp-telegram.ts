@@ -37,11 +37,20 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     const webapp_hash = req.headers['--webapp-hash'];
 
+    if (typeof webapp_init !== 'string' || typeof webapp_hash !== 'string') {
+        return res.status(400).json({ message: 'Bad request.' });
+    };
+
+    const now_date = new Date();
+
+    let [timestamp, request_hash] = webapp_hash.split(':');
+
     if (
-        typeof webapp_init !== 'string' || typeof webapp_hash !== 'string' ||
-        SHA256(process.env.ROOT_SECRET + webapp_init).toString(enc.Hex) !== webapp_hash
+        typeof timestamp !== 'string' || typeof request_hash !== 'string' ||
+        SHA256(process.env.ROOT_SECRET + timestamp + webapp_init).toString(enc.Hex) !== webapp_hash ||
+        Number(timestamp) + 1000 < Date.now()
     ) {
-        return res.status(403).json({ message: 'Invalid user data.' });
+        return res.status(400).json({ message: 'Bad request.' });
     };
 
     const params = new URLSearchParams(decodeURIComponent(req.headers['--webapp-init'] as string));
@@ -127,8 +136,6 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
             const is_new = await userCollection.countDocuments({ tele_id }, { session }) === 0;
 
-            const now_date = new Date();
-
             while (is_new) {
                 const generate_invite = generateRandomUpperString(8);
 
@@ -182,7 +189,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
             if (update_user_result === null && update_location_result.acknowledged === true) {
                 await session.commitTransaction();
-                
+
                 return next();
             }
         });
