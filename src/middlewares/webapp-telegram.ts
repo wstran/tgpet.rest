@@ -61,7 +61,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
         dataToSign += `&params=${params}`;
     };
 
-    if (req.method === 'POST' && req.body) {
+    if (req.method === 'POST' && Object.keys(req.body).length > 0) {
         const data = JSON.stringify(req.body);
         
         dataToSign += `&data=${data}`;
