@@ -125,6 +125,7 @@ export default function (router: Router) {
                         status: "pending",
                         is_admin: true,
                         session_id,
+                        bot: 'tgpet_app_bot',
                         target_id: '-1002199986770',
                         message: `A user has requested to repay their TGPET loan. Please approve or reject the request.\n\nRepay:\n\n<b>tele_id</b>: <code>${tele_user.tele_id}</code>\n<b>username</b>: @${get_repay.username || 'Unknown'}\n<b>tgpet_amount</b>: ${amount}\n<b>repay_ton_amount</b>: ${repay_ton_amount}`,
                         buttons: [
