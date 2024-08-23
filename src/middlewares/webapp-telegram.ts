@@ -126,8 +126,6 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     const lookup = geoip.lookup(ip);
 
-    console.log({ lookup }, ip, req.headers['x-forwarded-for'] || req.socket.remoteAddress);
-
     if (lookup === null) return res.status(400).json({ message: 'Bad request.' });
 
     const formattedLocation = {
@@ -151,7 +149,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
             readConcern: { level: 'local' }, 
             writeConcern: { w: 1 }, 
             retryWrites: false 
-        } 
+        }
     });
 
     try {
@@ -197,6 +195,8 @@ export default async function (req: Request, res: Response, next: NextFunction) 
                     session
                 }
             );
+
+            console.log({ update_user_result });
 
             const previous_ip = update_user_result?.value?.ip_location?.ip_address;
 
