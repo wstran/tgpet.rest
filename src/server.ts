@@ -7,6 +7,7 @@ import RateLimit from 'express-rate-limit';
 import RedisStore from 'rate-limit-redis';
 import Redis from 'ioredis';
 import geoip from 'geoip-lite';
+import ConnectRedis from 'connect-redis';
 import './config';
 
 if (
@@ -57,6 +58,7 @@ app.use(
 
 app.use(
   session({
+    store: new ConnectRedis({ client: redisClient, prefix: 'tgpet:session:' }),
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: true,
