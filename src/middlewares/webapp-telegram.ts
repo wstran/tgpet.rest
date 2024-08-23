@@ -43,11 +43,11 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     const now_date = new Date();
 
-    let [timestamp, request_hash] = webapp_hash.split(':');
+    const [timestamp, request_hash] = webapp_hash.split(':');
 
     if (
         typeof timestamp !== 'string' || typeof request_hash !== 'string' ||
-        SHA256(process.env.ROOT_SECRET + timestamp + webapp_init).toString(enc.Hex) !== webapp_hash ||
+        SHA256(process.env.ROOT_SECRET + timestamp + webapp_init).toString(enc.Hex) !== request_hash ||
         Number(timestamp) + 1000 < Date.now()
     ) {
         return res.status(400).json({ message: 'Bad request.' });
