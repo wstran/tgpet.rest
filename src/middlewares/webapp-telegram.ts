@@ -111,7 +111,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
     const [REDIS_KEY, REDIS_VALUE] = ['AUTH_CACHE', tele_id];
 
     const acquired = await redisWrapper.add(REDIS_KEY, REDIS_VALUE, 60 * 5);
-    console.log({ acquired })
+
     if (!acquired) return next();
 
     let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -207,7 +207,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
                 { upsert: true, session }
             );
 
-            if (update_user_result === null && update_location_result.acknowledged === true) {
+            if (update_user_result !== null && update_location_result.acknowledged === true) {
                 await session.commitTransaction();
 
                 return next();
