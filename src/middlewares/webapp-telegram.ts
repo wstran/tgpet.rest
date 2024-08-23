@@ -21,7 +21,7 @@ export interface RequestWithUser extends Request {
 };
 
 const redisWrapper = new RedisWrapper(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
-
+console.log('env:', process.env.NODE_ENV);
 export default async function (req: Request, res: Response, next: NextFunction) {
     if (process.env.NODE_ENV === 'development') {
         const user = { tele_id: '1853181392' } as User;
