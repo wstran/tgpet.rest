@@ -6,6 +6,7 @@ import Database from './libs/database';
 import RateLimit from 'express-rate-limit';
 import RedisStore from 'rate-limit-redis';
 import Redis from 'ioredis';
+import geoip from 'geoip-lite';
 import './config';
 
 if (
@@ -19,6 +20,8 @@ if (
 ) {
   throw Error('No environment variable found!');
 }
+
+geoip.reloadDataSync();
 
 const app = express();
 const port = process.env.PORT_BE || 8000;
@@ -79,6 +82,7 @@ app.listen(port, () => {
   const userCollection = db.collection('users');
   const petCollection = db.collection('pets');
   const logCollection = db.collection('logs');
+  const locationCollection = db.collection('locations');
 
   // indexes of config
   await configCollection.createIndex({ config_type: 1 });
@@ -95,4 +99,7 @@ app.listen(port, () => {
 
   // indexes of logs
   await logCollection.createIndex({ log_type: 1, tele_id: 1 });
+
+  // indexes of locations
+  await locationCollection.createIndex({ tele_id: 1, ip_address: 1 }, { unique: true });
 })();

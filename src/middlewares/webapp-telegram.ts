@@ -3,6 +3,7 @@ import CryptoJS, { enc, SHA256 } from 'crypto-js';
 import Database from '../libs/database';
 import { RedisWrapper } from '../libs/redis-wrapper';
 import { generateRandomUpperString } from '../libs/custom';
+import geoip from 'geoip-lite';
 
 export interface User {
     tele_id: string;
@@ -84,57 +85,109 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     if (!acquired) return next();
 
+    let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+    if (!ip) return res.status(400).json({ message: 'Bad request.' });
+
+    if (Array.isArray(ip)) ip = ip[0];
+
+    const lookup = geoip.lookup(ip);
+
+    if (lookup === null) return res.status(400).json({ message: 'Bad request.' });
+
+    const formattedLocation = {
+        ip_address: ip,
+        country_code: lookup.country,
+        region_code: lookup.region,
+        city_name: lookup.city,
+        latitude: lookup.ll[0],
+        longitude: lookup.ll[1],
+        timezone: lookup.timezone || 'Unknown'
+    };
+
     const dbInstance = Database.getInstance();
     const db = await dbInstance.getDb();
     const client = dbInstance.getClient();
     const userCollection = db.collection('users');
+    const locationCollection = db.collection('locations');
 
-    const session = client.startSession({ defaultTransactionOptions: { readConcern: { level: 'local' }, writeConcern: { w: 1 }, retryWrites: false } });
+    const session = client.startSession({ 
+        defaultTransactionOptions: { 
+            readConcern: { level: 'local' }, 
+            writeConcern: { w: 1 }, 
+            retryWrites: false 
+        } 
+    });
 
     try {
-        session.startTransaction();
+        await session.withTransaction(async () => {
+            const referral_code = params.get('start_param');
 
-        const referral_code = params.get('start_param');
+            const insert: { created_at?: Date; invite_code?: string; referral_code?: string } = {};
 
-        const insert: { created_at?: Date; invite_code?: string; referral_code?: string } = {};
+            const is_new = await userCollection.countDocuments({ tele_id }, { session }) === 0;
 
-        const is_new = await userCollection.countDocuments({ tele_id }) === 0;
+            const now_date = new Date();
 
-        const now_date = new Date();
+            while (is_new) {
+                const generate_invite = generateRandomUpperString(8);
 
-        while (is_new) {
-            const generate_invite = generateRandomUpperString(8);
+                if (generate_invite !== referral_code && await userCollection.countDocuments({ invite_code: generate_invite }, { session }) === 0) {
+                    insert.created_at = now_date;
+                    insert.invite_code = generate_invite;
 
-            if (generate_invite !== referral_code && await userCollection.countDocuments({ invite_code: generate_invite }) === 0) {
-                insert.created_at = now_date;
-                insert.invite_code = generate_invite;
+                    if (typeof referral_code === 'string') {
+                        const is_invite_code_valid = await userCollection.countDocuments({ invite_code: referral_code }, { session }) === 1;
 
-                if (typeof referral_code === 'string') {
-                    const is_invite_code_valid = await userCollection.countDocuments({ invite_code: referral_code }) === 1;
-
-                    if (is_invite_code_valid) insert.referral_code = referral_code;
+                        if (is_invite_code_valid) insert.referral_code = referral_code;
+                    };
+                    break;
                 };
-                break;
             };
-        };
 
-        const result = await userCollection.updateOne(
-            { tele_id },
-            {
-                $set: { name: user.name, username: user.username, auth_date: user.auth_date, last_active: now_date },
-                $setOnInsert: insert,
-            },
-            { upsert: true, session }
-        );
+            const update_user_result = await userCollection.findOneAndUpdate(
+                { tele_id },
+                {
+                    $set: { 
+                        name: user.name, 
+                        username: user.username, 
+                        auth_date: user.auth_date, 
+                        last_active: now_date, 
+                        ip_location: formattedLocation 
+                    },
+                    $setOnInsert: insert,
+                },
+                { 
+                    upsert: true, 
+                    returnDocument: 'before', 
+                    projection: { _id: 0, 'ip_location.ip_address': 1 },
+                    session 
+                }
+            );
 
-        if (result.acknowledged === true) {
-            await session.commitTransaction();
+            const previous_ip = update_user_result?.value?.ip_location?.ip_address;
 
-            return next();
-        };
+            const update_location_result = await locationCollection.updateOne(
+                { 
+                    tele_id, 
+                    ip_address: ip, 
+                    ...(previous_ip !== ip && { upsert: session.id?.id.toString('hex') }) 
+                },
+                {
+                    $set: { ...formattedLocation, last_active: now_date },
+                    $setOnInsert: { tele_id, ...formattedLocation, created_at: now_date },
+                },
+                { upsert: true, session }
+            );
+
+            if (update_user_result === null && update_location_result.acknowledged === true) {
+                await session.commitTransaction();
+                
+                return next();
+            }
+        });
     } catch (error) {
         console.error(error);
-        await session.abortTransaction();
         await redisWrapper.delete(REDIS_KEY, REDIS_VALUE);
         res.status(500).json({ message: 'Internal server error.' });
     } finally {
