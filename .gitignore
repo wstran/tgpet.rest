@@ -30,3 +30,4 @@ local_*
 release/*
 
 .note
+package-lock.json
