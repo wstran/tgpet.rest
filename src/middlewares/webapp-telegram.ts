@@ -55,8 +55,8 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     let dataToSign = `timestamp=${timestamp}&initData=${webapp_init}`;
 
-    if (req.method === 'GET' && req.params) {
-        const params = new URLSearchParams(req.params).toString();
+    if (req.method === 'GET' && Object.keys(req.query).length > 0) {
+        const params = new URLSearchParams(req.query as any).toString();
 
         dataToSign += `&params=${params}`;
     };
