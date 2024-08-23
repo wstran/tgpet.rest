@@ -124,7 +124,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     const lookup = geoip.lookup(ip);
 
-    console.log({ lookup });
+    console.log({ lookup }, ip, req.headers['x-forwarded-for'] || req.socket.remoteAddress);
 
     if (lookup === null) return res.status(400).json({ message: 'Bad request.' });
 
