@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import CryptoJS from 'crypto-js';
+import CryptoJS, { enc, SHA256 } from 'crypto-js';
 import Database from '../libs/database';
 import { RedisWrapper } from '../libs/redis-wrapper';
 import { generateRandomUpperString } from '../libs/custom';
@@ -32,6 +32,17 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     const secretKey = CryptoJS.HmacSHA256(process.env.BOT_TOKEN as string, 'WebAppData');
 
+    const webapp_init = req.headers['--webapp-init'];
+
+    const webapp_hash = req.headers['--webapp-hash'];
+
+    if (
+        typeof webapp_init !== 'string' || typeof webapp_hash !== 'string' ||
+        SHA256(process.env.ROOT_SECRET + webapp_init).toString(enc.Hex) !== webapp_hash
+    ) {
+        return res.status(403).json({ message: 'Invalid user data.' });
+    };
+
     const params = new URLSearchParams(decodeURIComponent(req.headers['--webapp-init'] as string));
 
     const hash = params.get('hash');
@@ -43,8 +54,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
     const hmac = CryptoJS.HmacSHA256(dataCheckString, secretKey).toString(CryptoJS.enc.Hex);
 
     if (hmac !== hash) {
-        res.status(403).json({ message: 'Invalid user data.' });
-        return;
+        return res.status(403).json({ message: 'Invalid user data.' });
     };
 
     const user_param = params.get('user');
@@ -52,8 +62,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
     const auth_date = Number(params.get('auth_date')) * 1000;
 
     if (typeof user_param !== 'string' || isNaN(auth_date)) {
-        res.status(400).json({ message: 'Bad request.' });
-        return;
+        return res.status(400).json({ message: 'Bad request.' });
     };
 
     const parse_user = JSON.parse(user_param);

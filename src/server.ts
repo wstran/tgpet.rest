@@ -61,7 +61,7 @@ app.use(
 );
 
 app.use((_, res, next) => {
-  res.header('Access-Control-Allow-Headers', 'Content-Type, --webapp-init');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, --webapp-init, --webapp-hash');
   next();
 });
 
