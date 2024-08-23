@@ -112,6 +112,8 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     const acquired = await redisWrapper.add(REDIS_KEY, REDIS_VALUE, 60 * 5);
 
+    console.log({ acquired });
+
     if (!acquired) return next();
 
     let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -121,6 +123,8 @@ export default async function (req: Request, res: Response, next: NextFunction) 
     if (Array.isArray(ip)) ip = ip[0];
 
     const lookup = geoip.lookup(ip);
+
+    console.log({ lookup });
 
     if (lookup === null) return res.status(400).json({ message: 'Bad request.' });
 
