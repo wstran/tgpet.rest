@@ -207,16 +207,19 @@ export default async function (req: Request, res: Response, next: NextFunction) 
                 { upsert: true, session }
             );
 
-            if (update_user_result !== null && update_location_result.acknowledged === true) {
-                await session.commitTransaction();
-
-                return next();
-            }
+            if (update_location_result.acknowledged !== true) {
+                res.status(500).json({ message: 'Transaction failed to commit.' });
+                throw new Error('Transaction failed to commit.');
+            };
         });
+
+        return next();
     } catch (error) {
-        console.error(error);
         await redisWrapper.delete(REDIS_KEY, REDIS_VALUE);
-        res.status(500).json({ message: 'Internal server error.' });
+        if (!res.headersSent) {
+            console.error(error);
+            res.status(500).json({ message: 'Internal server error.' });
+        };
     } finally {
         await session.endSession();
     };
