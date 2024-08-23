@@ -112,8 +112,6 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     const acquired = await redisWrapper.add(REDIS_KEY, REDIS_VALUE, 60 * 5);
 
-    console.log({ acquired });
-
     if (!acquired) return next();
 
     let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -196,9 +194,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
                 }
             );
 
-            console.log({ update_user_result });
-
-            const previous_ip = update_user_result?.value?.ip_location?.ip_address;
+            const previous_ip = update_user_result?.ip_location?.ip_address;
 
             const update_location_result = await locationCollection.updateOne(
                 { 
@@ -212,8 +208,6 @@ export default async function (req: Request, res: Response, next: NextFunction) 
                 },
                 { upsert: true, session }
             );
-
-            console.log({ update_user_result, update_location_result });
 
             if (update_location_result.acknowledged !== true) {
                 res.status(500).json({ message: 'Transaction failed to commit.' });
