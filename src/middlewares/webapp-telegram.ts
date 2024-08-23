@@ -41,19 +41,37 @@ export default async function (req: Request, res: Response, next: NextFunction) 
         return res.status(400).json({ message: 'Bad request.' });
     };
 
-    const now_date = new Date();
-
     const [timestamp, request_hash] = webapp_hash.split(':');
 
-    if (
-        typeof timestamp !== 'string' || typeof request_hash !== 'string' ||
-        SHA256(process.env.ROOT_SECRET + timestamp + webapp_init).toString(enc.Hex) !== request_hash ||
-        Number(timestamp) + 1000 < Date.now()
-    ) {
+    if (typeof timestamp !== 'string' || typeof request_hash !== 'string') {
         return res.status(400).json({ message: 'Bad request.' });
     };
 
-    const params = new URLSearchParams(decodeURIComponent(req.headers['--webapp-init'] as string));
+    const now_date = new Date();
+
+    if (Number(timestamp) + 1000 < now_date.getTime()) {
+        return res.status(400).json({ message: 'Bad request.' });
+    };
+
+    let dataToSign = `timestamp=${timestamp}&initData=${webapp_init}`;
+
+    if (req.method === 'GET' && req.query) {
+        const params = new URLSearchParams(req.query as any).toString();
+        dataToSign += `&params=${params}`;
+    };
+
+    if (req.method === 'POST' && req.body) {
+        const data = JSON.stringify(req.body);
+        dataToSign += `&data=${data}`;
+    };
+
+    const serverSignature = SHA256(process.env.ROOT_SECRET + dataToSign).toString(enc.Hex);
+
+    if (serverSignature !== request_hash) {
+        return res.status(400).json({ message: 'Bad request.' });
+    };
+
+    const params = new URLSearchParams(decodeURIComponent(webapp_init));
 
     const hash = params.get('hash');
 
