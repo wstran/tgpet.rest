@@ -49,7 +49,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     const now_date = new Date();
 
-    if (Number(timestamp) + 1000 < now_date.getTime()) {
+    if (Number(timestamp) + 4000 < now_date.getTime()) {
         return res.status(400).json({ message: 'Bad request.' });
     };
 
