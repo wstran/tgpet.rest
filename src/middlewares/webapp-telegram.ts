@@ -42,13 +42,13 @@ export default async function (req: Request, res: Response, next: NextFunction) 
     };
 
     const [timestamp, request_hash] = webapp_hash.split(':');
-    console.log("(typeof timestamp !== 'string' || typeof request_hash !== 'string'", (typeof timestamp !== 'string' || typeof request_hash !== 'string'));
+
     if (typeof timestamp !== 'string' || typeof request_hash !== 'string') {
         return res.status(400).json({ message: 'Bad request.' });
     };
 
     const now_date = new Date();
-    console.log("Number(timestamp) + 4000 < now_date.getTime()", Number(timestamp) + 4000 < now_date.getTime());
+
     if (Number(timestamp) + 4000 < now_date.getTime()) {
         return res.status(400).json({ message: 'Bad request.' });
     };
@@ -63,10 +63,12 @@ export default async function (req: Request, res: Response, next: NextFunction) 
     if (req.method === 'POST' && req.body) {
         const data = JSON.stringify(req.body);
         dataToSign += `&data=${data}`;
+
+        console.log({ data, dataToSign });
     };
 
     const serverSignature = MD5(process.env.ROOT_SECRET + dataToSign).toString(enc.Hex);
-    console.log("serverSignature !== request_hash", serverSignature !== request_hash);
+    
     if (serverSignature !== request_hash) {
         return res.status(400).json({ message: 'Bad request.' });
     };
