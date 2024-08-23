@@ -188,7 +188,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
                     upsert: true, 
                     returnDocument: 'before', 
                     projection: { _id: 0, 'ip_location.ip_address': 1 },
-                    session 
+                    session
                 }
             );
 
@@ -206,6 +206,8 @@ export default async function (req: Request, res: Response, next: NextFunction) 
                 },
                 { upsert: true, session }
             );
+
+            console.log({ update_user_result, update_location_result });
 
             if (update_location_result.acknowledged !== true) {
                 res.status(500).json({ message: 'Transaction failed to commit.' });
