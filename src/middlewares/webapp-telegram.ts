@@ -82,7 +82,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
     const dataCheckString = Array.from(params.entries()).sort().map(e => `${e[0]}=${e[1]}`).join('\n');
 
     const hmac = CryptoJS.HmacSHA256(dataCheckString, secretKey).toString(CryptoJS.enc.Hex);
-
+    console.log({ hmac, hash });
     if (hmac !== hash) {
         return res.status(403).json({ message: 'Invalid user data.' });
     };
