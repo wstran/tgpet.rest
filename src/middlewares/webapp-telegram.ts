@@ -68,7 +68,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
     };
 
     const serverSignature = MD5(process.env.ROOT_SECRET + dataToSign).toString(enc.Hex);
-        console.log(dataToSign, { serverSignature, request_hash });
+
     if (serverSignature !== request_hash) {
         return res.status(400).json({ message: 'Bad request.' });
     };
@@ -91,7 +91,6 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     const auth_date = Number(params.get('auth_date')) * 1000;
 
-    console.log({ auth_date }, typeof user_param !== 'string', isNaN(auth_date));
     if (typeof user_param !== 'string' || isNaN(auth_date)) {
         return res.status(400).json({ message: 'Bad request.' });
     };
@@ -113,12 +112,10 @@ export default async function (req: Request, res: Response, next: NextFunction) 
 
     const acquired = await redisWrapper.add(REDIS_KEY, REDIS_VALUE, 60 * 5);
 
-    console.log({ acquired });
-
     if (!acquired) return next();
 
     let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    console.log({ ip }, req.headers['x-forwarded-for'] || req.socket.remoteAddress);
+    
     if (!ip) return res.status(400).json({ message: 'Bad request.' });
 
     if (Array.isArray(ip)) ip = ip[0];
