@@ -200,7 +200,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
                 { 
                     tele_id,
                     ip_address: ip,
-                    ...(previous_ip !== ip && { upsert: 1 })
+                    ...(previous_ip !== ip && { previous_ip })
                 },
                 {
                     $set: { ...formattedLocation, last_active: now_date },
