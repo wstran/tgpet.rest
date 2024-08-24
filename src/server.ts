@@ -17,8 +17,7 @@ if (
   !process.env.CLIENT_URL ||
   !process.env.REDIS_URL ||
   !process.env.SESSION_SECRET ||
-  !process.env.SECRET_KEY ||
-  !process.env.ROOT_SECRET
+  !process.env.SECRET_KEY
 ) {
   throw Error('No environment variable found!');
 }
