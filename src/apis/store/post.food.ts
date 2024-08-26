@@ -65,7 +65,18 @@ export default function (router: Router) {
                 const [update_user_result, insert_log_result] = await Promise.all([
                     userCollection.updateOne(
                         { tele_id: tele_user.tele_id, [`balances.${token}`]: { $gte: total_cost } },
-                        { $inc: { [`balances.${token}`]: -total_cost, 'totals.spent': total_cost, 'totals.spent_food': total_cost, [`totals.${token}_spent`]: total_cost, [`totals.${token}_spent_food`]: total_cost, [`inventorys.${food_name}`]: food_amount } },
+                        {
+                            $inc: {
+                                [`balances.${token}`]: -total_cost,
+                                'totals.spent': total_cost,
+                                'totals.spent_food': total_cost,
+                                [`totals.${token}_spent`]: total_cost,
+                                [`totals.${token}_spent_food`]: total_cost,
+                                [`totals.buy_food_${token}_${food_name}_amount`]: food_amount,
+                                [`totals.buy_food_${food_name}_amount`]: food_amount,
+                                [`inventorys.${food_name}`]: food_amount
+                            }
+                        },
                         { session }
                     ),
                     logCollection.insertOne(
