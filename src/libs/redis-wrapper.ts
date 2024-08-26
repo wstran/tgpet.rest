@@ -3,7 +3,6 @@ import IORedis, { Redis } from 'ioredis';
 export class RedisWrapper {
     private redisClient: Redis;
     private localMap: Map<string, any> = new Map();
-    private localSet: Set<string> = new Set();
     private useRedis: boolean = true;
 
     constructor(redisUrl: string) {
@@ -82,31 +81,6 @@ export class RedisWrapper {
             await this.redisClient.del(`${key}:${value}`);
         } else {
             this.localMap.delete(`${key}:${value}`);
-        };
-    };
-
-    async multi_add(key: string, value: string, ttl: number): Promise<void> {
-        if (this.useRedis) {
-            await this.redisClient.multi().sadd(key, value).set(`key:${value}`, '', 'EX', ttl).exec();
-        } else {
-            this.localSet.add(value);
-            setTimeout(() => this.localSet.delete(value), ttl * 1000);
-        };
-    };
-
-    async multi_has(key: string, value: string): Promise<boolean> {
-        if (this.useRedis) {
-            return !!(await this.redisClient.sismember(key, value));
-        } else {
-            return this.localSet.has(value);
-        };
-    };
-
-    async multi_delete(key: string, value: string): Promise<void> {
-        if (this.useRedis) {
-            await this.redisClient.multi().srem(key, value).del(`key:${value}`).exec();
-        } else {
-            this.localSet.delete(value);
         };
     };
 };
