@@ -181,7 +181,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
                         name: user.name, 
                         username: user.username, 
                         auth_date: user.auth_date, 
-                        last_active: now_date, 
+                        last_active_at: now_date, 
                         ip_location: formattedLocation 
                     },
                     $setOnInsert: insert,
@@ -203,7 +203,7 @@ export default async function (req: Request, res: Response, next: NextFunction) 
                     ...(previous_ip !== ip && { previous_ip })
                 },
                 {
-                    $set: { ...formattedLocation, last_active: now_date },
+                    $set: { ...formattedLocation, last_active_at: now_date },
                     $setOnInsert: { tele_id, created_at: now_date },
                 },
                 { upsert: true, session }
