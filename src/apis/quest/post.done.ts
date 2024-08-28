@@ -16,7 +16,7 @@ export default function (router: Router) {
 
         const config_onetime_quests = CONFIG.GET('game_onetime_quests');
 
-        if (typeof quest_id !== 'string' || !config_onetime_quests.quests[quest_id]) {
+        if (typeof quest_id !== 'string' || !config_onetime_quests.quests[quest_id]?._state === true) {
             res.status(400).json({ message: 'Bad request. Invalid quest ID.' });
             return;
         };
